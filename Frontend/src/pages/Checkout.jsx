@@ -332,7 +332,7 @@ function Checkout() {
                       value={option.value}
                       checked={paymentMethod === option.value}
                       onChange={(e) => setPaymentMethod(e.target.value)}
-                      className="mt-1 accent-[#722f37]"
+                      className="mt-1 accent-burgundy"
                     />
                     <span>
                       <span className="block font-medium">{option.value}</span>

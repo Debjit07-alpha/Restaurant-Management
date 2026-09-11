@@ -35,13 +35,19 @@ function Register() {
   };
 
   return (
-    <div className="max-w-md mx-auto px-4 py-10">
-      <div className="bg-white shadow rounded-lg p-6">
-        <h1 className="text-2xl font-bold text-center">Create Account</h1>
+    <div className="max-w-md mx-auto px-4 py-12 animate-fade-in">
+      <div className="bg-white border border-charcoal/10 shadow-[0_20px_45px_-25px_rgba(23,23,23,0.4)] rounded-[24px] p-6 sm:p-8">
+        <p className="text-center font-display text-xl">
+          Tasty<span className="italic text-burgundy">Bites</span>
+        </p>
+        <h1 className="font-display font-semibold text-3xl text-center mt-2">Create Account</h1>
+        <p className="text-sm text-center text-charcoal/55 mt-2">
+          Join us for fresh food, fast delivery and great taste.
+        </p>
         {error && (
-          <p className="mt-4 bg-red-100 text-red-700 text-sm p-2 rounded">{error}</p>
+          <p className="mt-4 bg-red-100 text-red-700 text-sm p-3 rounded-xl">{error}</p>
         )}
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
             <label className="block text-sm font-medium">Full Name</label>
             <input
@@ -50,7 +56,8 @@ function Register() {
               value={form.name}
               onChange={handleChange}
               required
-              className="mt-1 w-full border rounded px-3 py-2"
+              autoComplete="name"
+              className="mt-1.5 w-full border border-charcoal/15 rounded-xl px-3.5 py-2.5 bg-cream focus:outline-none focus:border-burgundy"
               placeholder="John Doe"
             />
           </div>
@@ -62,7 +69,8 @@ function Register() {
               value={form.email}
               onChange={handleChange}
               required
-              className="mt-1 w-full border rounded px-3 py-2"
+              autoComplete="email"
+              className="mt-1.5 w-full border border-charcoal/15 rounded-xl px-3.5 py-2.5 bg-cream focus:outline-none focus:border-burgundy"
               placeholder="you@example.com"
             />
           </div>
@@ -74,7 +82,8 @@ function Register() {
               value={form.password}
               onChange={handleChange}
               required
-              className="mt-1 w-full border rounded px-3 py-2"
+              autoComplete="new-password"
+              className="mt-1.5 w-full border border-charcoal/15 rounded-xl px-3.5 py-2.5 bg-cream focus:outline-none focus:border-burgundy"
             />
           </div>
           <div>
@@ -85,20 +94,21 @@ function Register() {
               value={form.confirmPassword}
               onChange={handleChange}
               required
-              className="mt-1 w-full border rounded px-3 py-2"
+              autoComplete="new-password"
+              className="mt-1.5 w-full border border-charcoal/15 rounded-xl px-3.5 py-2.5 bg-cream focus:outline-none focus:border-burgundy"
             />
           </div>
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-orange-600 text-white py-2 rounded hover:bg-orange-700 disabled:opacity-50"
+            className="w-full bg-burgundy text-white py-3 rounded-[28px] text-[15px] font-semibold hover:bg-burgundy-dark transition-all disabled:opacity-50"
           >
             {loading ? "Registering..." : "Register"}
           </button>
         </form>
-        <p className="text-sm text-center mt-4">
+        <p className="text-sm text-center mt-5 text-charcoal/60">
           Already have an account?{" "}
-          <Link to="/login" className="text-orange-600 hover:underline">
+          <Link to="/login" className="text-burgundy hover:underline font-medium">
             Login
           </Link>
         </p>

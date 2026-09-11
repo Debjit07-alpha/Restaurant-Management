@@ -112,14 +112,14 @@ function Navbar() {
             <span className="block font-display text-[26px] font-semibold tracking-tight">
               Tasty<span className="italic text-burgundy">Bites</span>
             </span>
-            <span className="block text-[9px] tracking-[0.32em] text-charcoal/50 mt-1">
-              GOOD FOOD&nbsp;&nbsp;HAPPY PEOPLE
+            <span className="hidden sm:block text-[9px] tracking-[0.22em] text-charcoal/50 mt-1">
+              GOOD FOOD, HAPPY PEOPLE
             </span>
           </span>
         </Link>
 
         {/* Center nav */}
-        <div className="hidden lg:flex items-center gap-9 text-[16px] ml-4">
+        <div className="hidden lg:flex items-center gap-8 text-[16px] ml-4">
           <Link
             to="/"
             onClick={closeMenu}
@@ -130,6 +130,7 @@ function Navbar() {
           </Link>
           {navLink("Menu", false, goToSection("menu"))}
           {navLink("About", false, goToSection("about"))}
+          {navLink("Offers", false, goToSection("offers"))}
           {navLink("Contact", false, goToSection("contact"))}
         </div>
 
@@ -137,30 +138,14 @@ function Navbar() {
         {searchBox("hidden xl:flex items-center gap-2.5 bg-white border border-charcoal/10 rounded-full pl-5 pr-4 h-[48px] w-[420px] ml-auto shadow-sm")}
 
         {/* Right cluster */}
-        <div className="hidden md:flex items-center gap-6 text-[15px] shrink-0 ml-auto xl:ml-0">
-          <Link to="/cart" className="flex items-center gap-2 hover:text-burgundy transition-colors">
-            <span className="relative">
-              <svg className="w-[22px] h-[22px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
-              </svg>
-              {totalQuantity > 0 && (
-                <span className="absolute -top-2 -right-2.5 min-w-5 h-5 px-1 rounded-full bg-burgundy text-cream text-[11px] font-semibold flex items-center justify-center">
-                  {totalQuantity}
-                </span>
-              )}
-            </span>
-            <span className="font-medium">Cart</span>
-          </Link>
-
-          <span className="w-px h-8 bg-charcoal/15" />
-
+        <div className="hidden md:flex items-center gap-5 text-[15px] shrink-0 ml-auto xl:ml-0">
           {isAdmin && (
             <Link to="/admin/dashboard" className="hover:text-burgundy transition-colors font-medium">
               Dashboard
             </Link>
           )}
 
-          {!user && (
+          {!user ? (
             <>
               <Link to="/login" className="hover:text-burgundy transition-colors font-medium">
                 Login
@@ -172,23 +157,43 @@ function Navbar() {
                 Sign Up
               </Link>
             </>
+          ) : (
+            <span className="flex items-center gap-2.5">
+              <span className="w-10 h-10 rounded-full bg-burgundy text-cream flex items-center justify-center font-semibold text-lg">
+                {(user.name || "U").charAt(0).toUpperCase()}
+              </span>
+              <span className="leading-tight hidden lg:block">
+                <span className="block text-sm font-semibold whitespace-nowrap">
+                  Hi, {user.name}
+                </span>
+              </span>
+              <svg className="w-4 h-4 text-charcoal/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+              </svg>
+            </span>
           )}
+
+          <Link
+            to="/cart"
+            className="flex items-center gap-2 bg-burgundy text-white rounded-full pl-4 pr-5 h-[46px] font-medium hover:bg-burgundy-dark transition-colors shadow-[0_8px_20px_-8px_rgba(217,45,32,0.7)]"
+          >
+            <span className="relative">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
+              </svg>
+              {totalQuantity > 0 && (
+                <span className="absolute -top-2 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-white text-burgundy text-[11px] font-bold flex items-center justify-center">
+                  {totalQuantity}
+                </span>
+              )}
+            </span>
+            Cart ({totalQuantity})
+          </Link>
 
           {user && (
             <>
-              <span className="flex items-center gap-2.5">
-                <span className="w-10 h-10 rounded-full bg-burgundy text-cream flex items-center justify-center font-semibold text-lg">
-                  {(user.name || "U").charAt(0).toUpperCase()}
-                </span>
-                <span className="leading-tight">
-                  <span className="block text-sm font-semibold">Hi, {user.name}</span>
-                </span>
-                <svg className="w-4 h-4 text-charcoal/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                </svg>
-              </span>
               {!isAdmin && (
-                <Link to="/orders" className="hover:text-burgundy transition-colors font-medium">
+                <Link to="/orders" className="hover:text-burgundy transition-colors font-medium whitespace-nowrap">
                   My Orders
                 </Link>
               )}
@@ -235,6 +240,9 @@ function Navbar() {
           </a>
           <a href="#about" onClick={goToSection("about")}>
             About
+          </a>
+          <a href="#offers" onClick={goToSection("offers")}>
+            Offers
           </a>
           <a href="#contact" onClick={goToSection("contact")}>
             Contact
