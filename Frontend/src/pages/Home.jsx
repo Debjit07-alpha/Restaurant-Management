@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import api from "../api/axios";
-import MenuImage from "../components/MenuImage";
 import Hero from "../components/home/Hero";
 import CategoryFilter from "../components/home/CategoryFilter";
 import PopularDishes from "../components/home/PopularDishes";
@@ -10,7 +9,6 @@ import ServiceFeatures from "../components/home/ServiceFeatures";
 import Testimonials from "../components/home/Testimonials";
 import SiteFooter from "../components/home/SiteFooter";
 import { matchesCategory } from "../utils/categories";
-import { scrollToId } from "../utils/scroll";
 
 function DishSkeleton() {
   return (
@@ -60,8 +58,6 @@ function Home() {
       item.category?.toLowerCase().includes(q);
     return matchesCategory(item, category) && matchesQuery;
   });
-
-  const aboutImage = menuItems.find((item) => item.image)?.image || "";
 
   const clearSearch = () => {
     setSearchParams({}, { replace: true });
@@ -158,49 +154,6 @@ function Home() {
       {/* 7. CUSTOMER REVIEWS */}
       <div className="bg-cream-dark/40">
         <Testimonials />
-      </div>
-
-      {/* About anchor target (slim; keeps navbar/footer About working) */}
-      <div className="bg-cream-dark/40">
-        <section
-          id="about"
-          className="max-w-[1520px] mx-auto px-6 lg:px-12 pb-16 sm:pb-20 grid gap-10 md:grid-cols-2 items-center scroll-mt-20"
-        >
-          <div className="overflow-hidden rounded-[24px] bg-cream-dark h-72 sm:h-96 shadow-md order-2 md:order-1">
-            {aboutImage ? (
-              <MenuImage
-                src={aboutImage}
-                alt="Fresh from the TastyBites kitchen"
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <span className="flex h-full w-full items-center justify-center font-display italic text-charcoal/30 text-2xl">
-                TastyBites
-              </span>
-            )}
-          </div>
-          <div className="order-1 md:order-2">
-            <p className="flex items-center gap-3 mb-4">
-              <span className="inline-block w-10 h-[2.5px] rounded-full bg-burgundy" />
-            </p>
-            <h2 className="font-display font-semibold text-4xl sm:text-[44px] leading-tight">
-              A small kitchen with a{" "}
-              <span className="italic text-burgundy font-medium">big love</span> for food.
-            </h2>
-            <p className="text-charcoal/70 mt-5 leading-[1.8] max-w-lg">
-              TastyBites started with a simple idea: cook every dish like
-              it&apos;s for family. Our menu stays short on purpose — a
-              careful selection of starters, mains, desserts and beverages,
-              prepared fresh through the day and served with care.
-            </p>
-            <button
-              onClick={() => scrollToId("menu")}
-              className="mt-7 border border-charcoal/20 rounded-full px-8 py-3 text-sm font-semibold hover:border-burgundy hover:text-burgundy transition-colors"
-            >
-              Explore menu →
-            </button>
-          </div>
-        </section>
       </div>
 
       {/* 8. FOOTER */}
