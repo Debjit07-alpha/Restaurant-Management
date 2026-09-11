@@ -14,12 +14,24 @@ const orderRoutes = require("./routes/orderRoutes");
 
 const app = express();
 
-// Connect to MongoDB
-connectDB();
-
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Ensure MongoDB is connected before handling API requests.
+// Locally this is a no-op (already connected at startup); on Vercel
+// (serverless) it (re)connects using the cached connection in config/db.
+app.use("/api", async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Database connection failed"
+    });
+  }
+});
 
 // API Routes
 app.use("/api/auth", authRoutes);
@@ -60,9 +72,19 @@ app.use((err, req, res, next) => {
   next();
 });
 
-// Port
-const PORT = process.env.PORT || 5001;
+// Local development only: connect first, then listen on port 5001.
+// On Vercel this file is imported as a serverless function (see api/index.js),
+// so require.main !== module there and app.listen is skipped.
+if (require.main === module) {
+  const PORT = process.env.PORT || 5001;
 
-app.listen(PORT, () => {
-  console.log(`Backend running on http://localhost:${PORT}`);
-});
+  connectDB()
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log(`Backend running on http://localhost:${PORT}`);
+      });
+    })
+    .catch(() => process.exit(1));
+}
+
+module.exports = app;

@@ -74,6 +74,16 @@ function Login() {
             Register
           </Link>
         </p>
+        <div className="flex items-center gap-3 my-4">
+          <span className="flex-1 border-t" />
+          <span className="text-xs uppercase tracking-wider text-gray-400">Or</span>
+          <span className="flex-1 border-t" />
+        </div>
+        <p className="text-sm text-center">
+          <Link to="/admin/login" className="text-orange-600 hover:underline font-medium">
+            Admin Login
+          </Link>
+        </p>
       </div>
     </div>
   );
