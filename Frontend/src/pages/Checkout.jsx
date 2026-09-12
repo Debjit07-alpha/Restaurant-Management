@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
@@ -11,7 +11,6 @@ const inputClass =
   "mt-1 w-full border border-charcoal/20 rounded-xl px-3 py-2 bg-cream focus:outline-none focus:border-burgundy";
 
 function Checkout() {
-  const navigate = useNavigate();
   const { user } = useAuth();
   const { cartItems, totalPrice, clearCart } = useCart();
 
@@ -29,6 +28,10 @@ function Checkout() {
   const [paymentMethod, setPaymentMethod] = useState("Cash on Delivery");
   const [error, setError] = useState("");
   const [placing, setPlacing] = useState(false);
+  // idle → loading → success | error. Success is shown ONLY after the
+  // backend confirms the order is stored in the database.
+  const [status, setStatus] = useState("idle");
+  const [placedOrder, setPlacedOrder] = useState(null);
   const [locationNote, setLocationNote] = useState("");
   const [locating, setLocating] = useState(false);
 
@@ -43,6 +46,47 @@ function Checkout() {
 
   const deliveryCharge = getDeliveryCharge(totalPrice);
   const grandTotal = totalPrice + deliveryCharge;
+
+  // Success screen stays on this same page after the backend confirms.
+  // It must render before the empty-cart guard because the cart is
+  // cleared only after a confirmed order.
+  if (status === "success" && placedOrder) {
+    return (
+      <div className="bg-cream text-charcoal">
+        <div className="max-w-xl mx-auto px-4 sm:px-6 py-16 sm:py-20 text-center animate-fade-in">
+          <span className="inline-flex w-16 h-16 items-center justify-center rounded-full bg-pine text-cream text-3xl shadow-md">
+            ✓
+          </span>
+          <h1 className="font-display font-semibold text-4xl sm:text-5xl mt-6">
+            Order Placed <span className="italic text-burgundy">Successfully!</span>
+          </h1>
+          <p className="text-charcoal/65 mt-4 leading-relaxed">
+            Thank you for your order.
+            <br />
+            Your order has been received and is being processed.
+          </p>
+          <p className="mt-6 inline-block border border-charcoal/15 rounded-full px-6 py-2.5 text-[15px] bg-white">
+            Order ID:{" "}
+            <span className="font-bold">#{placedOrder.orderId}</span>
+          </p>
+          <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+            <Link
+              to="/"
+              className="flex-1 sm:flex-none bg-burgundy text-white rounded-[28px] px-8 py-3.5 text-[15px] font-semibold hover:bg-burgundy-dark transition-all hover:-translate-y-0.5 text-center"
+            >
+              Continue Browsing
+            </Link>
+            <Link
+              to="/cart"
+              className="flex-1 sm:flex-none border border-charcoal/20 rounded-[28px] px-8 py-3.5 text-[15px] font-semibold hover:border-burgundy hover:text-burgundy transition-all hover:-translate-y-0.5 text-center"
+            >
+              Continue Carting
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (cartItems.length === 0) {
     return (
@@ -94,6 +138,9 @@ function Checkout() {
     e.preventDefault();
     setError("");
 
+    // Ignore duplicate clicks while a request is in flight or done.
+    if (placing || status === "success") return;
+
     if (cartItems.length === 0) {
       setError("Your cart is empty.");
       return;
@@ -116,6 +163,7 @@ function Checkout() {
     }
 
     setPlacing(true);
+    setStatus("loading");
     try {
       const res = await api.post("/orders", {
         customerName: form.fullName.trim(),
@@ -135,13 +183,17 @@ function Checkout() {
           quantity: entry.quantity,
         })),
       });
-      // Clear cart only after the backend confirms the order
+      // The backend confirmed the order is stored: show inline success
+      // on this same page, then clear the purchased cart.
+      setPlacedOrder(res.data.order);
+      setStatus("success");
       clearCart();
-      navigate(`/order-success/${res.data.order._id}`);
     } catch (err) {
+      // Failure: stay on checkout, keep the cart, re-enable the button.
+      setStatus("error");
       setError(
         err.response?.data?.message ||
-          "Failed to place order. Please try again."
+          "Unable to place your order. Please try again."
       );
     } finally {
       setPlacing(false);
