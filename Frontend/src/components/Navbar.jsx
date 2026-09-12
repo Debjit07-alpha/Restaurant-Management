@@ -78,7 +78,7 @@ function Navbar() {
         type="search"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        placeholder="Search for your favorite food..."
+        placeholder="Search for your favorite dishes..."
         aria-label="Search menu"
         className="bg-transparent outline-none text-[15px] w-full placeholder:text-charcoal/40"
       />

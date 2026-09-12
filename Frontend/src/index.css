@@ -56,6 +56,68 @@ body {
   animation: admin-slide-in 0.25s ease-out both;
 }
 
+/* ---------- Homepage hero: mask lives ONLY on the food <img> ----------
+   Nothing else in the hero is masked, faded, or washed. The transparent
+   part of the photo reveals the cream page background underneath. */
+.hero-food-img {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    transparent 2%,
+    rgba(0, 0, 0, 0.42) 8%,
+    rgba(0, 0, 0, 0.66) 18%,
+    rgba(0, 0, 0, 0.86) 28%,
+    rgba(0, 0, 0, 0.88) 40%,
+    black 52%,
+    black 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    transparent 2%,
+    rgba(0, 0, 0, 0.42) 8%,
+    rgba(0, 0, 0, 0.66) 18%,
+    rgba(0, 0, 0, 0.86) 28%,
+    rgba(0, 0, 0, 0.88) 40%,
+    black 52%,
+    black 100%
+  );
+}
+
+@media (max-width: 1023px) {
+  .hero-food-img {
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 26%);
+    mask-image: linear-gradient(to bottom, transparent 0%, black 26%);
+  }
+}
+
+/* Soft vertical edge fade for the photo frame (desktop). The frame
+   wraps ONLY the <img>, so decorations are unaffected. Combined with
+   the img's own left-fade mask, every edge dissolves into cream. */
+.hero-food-frame {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    black 10%,
+    black 86%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    black 10%,
+    black 86%,
+    transparent 100%
+  );
+}
+
+@media (max-width: 1023px) {
+  .hero-food-frame {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
+
 /* Homepage entrance */
 @keyframes page-fade-in {
   from {
