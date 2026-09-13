@@ -37,7 +37,85 @@ function Checkout() {
   const [placedOrder, setPlacedOrder] = useState(null);
   const [locationNote, setLocationNote] = useState("");
   const [detectedLabel, setDetectedLabel] = useState("");
+  // Temporary development readout of the raw GPS fix (removed later).
+  const [debugCoords, setDebugCoords] = useState(null);
   const [locationOk, setLocationOk] = useState(false);
+  // Address search fallback (Geoapify Autocomplete via our backend, no
+  // GPS needed). Independent of the location button above.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
+
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setSearchText("");
+    setSuggestions([]);
+    setSearching(false);
+    setSearchError("");
+  };
+
+  const selectSuggestion = (suggestion) => {
+    applyDetectedAddress(suggestion);
+    const labelParts = [
+      suggestion.street,
+      suggestion.area,
+      suggestion.city,
+      suggestion.postcode,
+    ].filter(
+      (part, index, all) =>
+        part && part.trim() !== "" && all.indexOf(part) === index
+    );
+    setDetectedLabel(
+      labelParts.length > 0
+        ? labelParts.join(", ")
+        : suggestion.displayName || ""
+    );
+    setDebugCoords(null);
+    setLocationOk(true);
+    setLocationNote("Address selected.");
+    if (restoreTimer.current) clearTimeout(restoreTimer.current);
+    restoreTimer.current = setTimeout(() => setLocationOk(false), 3500);
+    closeSearch();
+  };
+
+  // Debounced backend search (min 3 chars, stale responses ignored).
+  useEffect(() => {
+    const query = searchText.trim();
+    if (!searchOpen || query.length < 3) {
+      setSuggestions([]);
+      setSearching(false);
+      setSearchError("");
+      return;
+    }
+    let cancelled = false;
+    setSearching(true);
+    setSearchError("");
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.get("/location/autocomplete", {
+          params: { text: query },
+          timeout: 15000,
+        });
+        if (!cancelled) setSuggestions(res.data.suggestions || []);
+      } catch (err) {
+        if (!cancelled) {
+          setSuggestions([]);
+          setSearchError(
+            err.response?.data?.message ||
+              "Unable to search addresses right now. Please enter your address manually."
+          );
+        }
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searchText, searchOpen]);
   const [locating, setLocating] = useState(false);
   const restoreTimer = useRef(null);
 
@@ -165,37 +243,45 @@ function Checkout() {
       navigator.geolocation.getCurrentPosition(resolve, reject, options);
     });
 
-  // High-accuracy fix with accuracy awareness: up to 3 fresh readings,
-  // keeps the most accurate one. Readings at or under 100m are accepted
-  // immediately; worse readings trigger retries; anything still worse
-  // than 500m is refused with a low-accuracy message. Falls back to a
-  // network-based fix only when high accuracy times out (desktops and
-  // indoor phones often cannot produce a GPS fix in one short window).
-  const BEST_READINGS = 3;
-  const GOOD_ACCURACY_M = 100;
-  const POOR_ACCURACY_M = 500;
+  // Device GPS only (never IP/network approximation, never cached):
+  // fresh high-accuracy fixes, always maximumAge 0. Every reading is
+  // logged; only the smallest accuracy wins — but even the best reading
+  // must be <=100m. Anything worse is NEVER sent to Geoapify; desktop
+  // users are redirected to Search Address instead.
+  const GATE_M = 100;
+  const MAX_READINGS = 3;
+
+  const logRawPosition = (position) => {
+    console.log("GPS LOCATION", {
+      latitude: position.coords.latitude,
+      longitude: position.coords.longitude,
+      accuracy: position.coords.accuracy,
+      timestamp: position.timestamp,
+    });
+  };
 
   const acquireAccuratePosition = async () => {
+    const options = {
+      enableHighAccuracy: true,
+      timeout: 20000,
+      maximumAge: 0,
+    };
     let best = null;
     let lastError = null;
-    for (let attempt = 1; attempt <= BEST_READINGS; attempt += 1) {
+    for (let attempt = 1; attempt <= MAX_READINGS; attempt += 1) {
       try {
         if (attempt > 1) {
           setLocationNote(
-            `Improving location accuracy... (attempt ${attempt} of ${BEST_READINGS})`
+            `Improving location accuracy... (attempt ${attempt} of ${MAX_READINGS})`
           );
         }
-        const position = await requestPosition({
-          enableHighAccuracy: true,
-          timeout: 12000,
-          maximumAge: attempt === 1 ? 60000 : 0,
-        });
+        const position = await requestPosition(options);
+        logRawPosition(position);
         const accuracy = Number(position.coords.accuracy) || Infinity;
-        console.debug(`GPS accuracy: ${Math.round(accuracy)} meters`);
         if (!best || accuracy < Number(best.coords.accuracy)) {
           best = position;
         }
-        if (accuracy <= GOOD_ACCURACY_M) return best;
+        if (accuracy <= GATE_M) return best;
       } catch (error) {
         // Permission denied never improves: stop immediately.
         if (error?.code === 1) throw error;
@@ -203,28 +289,16 @@ function Checkout() {
       }
     }
     if (best) {
-      if (Number(best.coords.accuracy) > POOR_ACCURACY_M) {
+      const bestAccuracy = Number(best.coords.accuracy) || Infinity;
+      if (bestAccuracy > GATE_M) {
         const poor = new Error("Poor accuracy");
         poor.code = "LOW_ACCURACY";
+        poor.accuracyM = Math.round(bestAccuracy);
         throw poor;
       }
       return best;
     }
-    // No reading at all: try one fast network-based fix, then give up.
-    setLocationNote("Still detecting your location...");
-    try {
-      const fallback = await requestPosition({
-        enableHighAccuracy: false,
-        timeout: 15000,
-        maximumAge: 60000,
-      });
-      console.debug(
-        `GPS accuracy: ${Math.round(Number(fallback.coords.accuracy))} meters`
-      );
-      return fallback;
-    } catch {
-      throw lastError || new Error("Position unavailable");
-    }
+    throw lastError || new Error("Position unavailable");
   };
 
   // One-time current-location lookup: browser geolocation (on click
@@ -242,10 +316,14 @@ function Checkout() {
     setLocating(true);
     setLocationOk(false);
     setDetectedLabel("");
+    setDebugCoords(null);
     setLocationNote("Detecting your location...");
     try {
       const position = await acquireAccuratePosition();
       const { latitude, longitude } = position.coords;
+      // Temporary development readout: verify on a map that these
+      // coordinates point at the real location before trusting Geoapify.
+      setDebugCoords({ latitude, longitude, accuracy });
       try {
         const res = await api.get("/location/reverse", {
           params: { lat: latitude, lng: longitude },
@@ -268,7 +346,11 @@ function Checkout() {
             : detected.displayName || ""
         );
         setLocationOk(true);
-        setLocationNote("Location detected.");
+        setLocationNote(
+          detected.lowConfidence
+            ? "Location detected, but address accuracy is low. Please verify."
+            : "Location detected."
+        );
         if (restoreTimer.current) clearTimeout(restoreTimer.current);
         restoreTimer.current = setTimeout(() => setLocationOk(false), 3500);
       } catch (err) {
@@ -286,8 +368,10 @@ function Checkout() {
           "Location permission denied. Please allow location access or enter your address manually."
         );
       } else if (geoError?.code === "LOW_ACCURACY") {
+        // Poor GPS (desktop-class fixes): never autofill, never invent.
+        // The Search Address option beside the button covers this case.
         setLocationNote(
-          "Location accuracy is low. Please try again with precise location enabled."
+          "Precise location is unavailable on this device. Please search your address instead."
         );
       } else if (geoError?.code === 3) {
         setLocationNote("Location detection timed out. Please try again.");
@@ -465,7 +549,93 @@ function Checkout() {
                       ? "Location Detected ✓"
                       : "Use My Current Location"}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchOpen((open) => !open);
+                    setSearchError("");
+                  }}
+                  aria-expanded={searchOpen}
+                  className="text-sm border border-charcoal/20 rounded-full px-4 py-1.5 hover:border-burgundy hover:text-burgundy transition-colors inline-flex items-center gap-1.5"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={1.8}
+                    aria-hidden
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 110-15 7.5 7.5 0 010 15z"
+                    />
+                  </svg>
+                  Search Address
+                </button>
               </div>
+              {searchOpen && (
+                <div className="mt-3 border border-charcoal/15 rounded-2xl p-4 bg-cream">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={searchText}
+                      onChange={(e) => setSearchText(e.target.value)}
+                      placeholder="Type street / area / landmark…"
+                      aria-label="Search address"
+                      maxLength={200}
+                      className="flex-1 min-w-0 border border-charcoal/20 rounded-xl px-3.5 py-2.5 text-sm bg-white placeholder:text-charcoal/35 focus:outline-none focus:border-burgundy"
+                    />
+                    <button
+                      type="button"
+                      onClick={closeSearch}
+                      aria-label="Close address search"
+                      className="shrink-0 w-9 h-9 rounded-full bg-white border border-charcoal/10 flex items-center justify-center hover:border-burgundy hover:text-burgundy transition-colors"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {searching && (
+                    <p className="mt-2 text-sm text-charcoal/60">Searching…</p>
+                  )}
+                  {searchError && (
+                    <p role="alert" className="mt-2 text-sm text-red-700">
+                      {searchError}
+                    </p>
+                  )}
+                  {!searching && !searchError && suggestions.length > 0 && (
+                    <ul className="mt-2 bg-white border border-charcoal/10 rounded-xl overflow-hidden divide-y divide-charcoal/10">
+                      {suggestions.map((suggestion) => (
+                        <li key={suggestion.id}>
+                          <button
+                            type="button"
+                            onClick={() => selectSuggestion(suggestion)}
+                            className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream-dark transition-colors"
+                          >
+                            <span className="block font-medium">
+                              {suggestion.displayName || suggestion.street}
+                            </span>
+                            <span className="block text-charcoal/55 text-[13px]">
+                              {[suggestion.city, suggestion.state, suggestion.postcode]
+                                .filter(Boolean)
+                                .join(", ")}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {!searching &&
+                    !searchError &&
+                    searchText.trim().length >= 3 &&
+                    suggestions.length === 0 && (
+                      <p className="mt-2 text-sm text-charcoal/60">
+                        No matches found. Try a nearby street or landmark.
+                      </p>
+                    )}
+                </div>
+              )}
               {locationNote && (
                 <p
                   role="status"
@@ -478,6 +648,13 @@ function Checkout() {
                 <p className="mt-1 text-sm text-charcoal/60">
                   Detected location:{" "}
                   <span className="font-medium text-charcoal">{detectedLabel}</span>
+                </p>
+              )}
+              {import.meta.env.DEV && debugCoords && (
+                <p className="mt-1 text-xs text-charcoal/50">
+                  Latitude: {debugCoords.latitude} · Longitude:{" "}
+                  {debugCoords.longitude} · Accuracy:{" "}
+                  {Math.round(Number(debugCoords.accuracy))} m
                 </p>
               )}
               <div className="mt-4 grid sm:grid-cols-2 gap-4">

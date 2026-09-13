@@ -126,8 +126,25 @@ const selectGeoapifyFeature = (features) => {
   );
 };
 
+// Street-precise Geoapify result types. Anything broader (locality,
+// city, postcode-only, administrative, ...) is flagged low-confidence
+// so the frontend asks the customer to verify instead of trusting it.
+const GEOAPIFY_STREET_TYPES = new Set(["amenity", "building", "street"]);
+
 const mapGeoapify = (feature) => {
   const p = geoProps(feature);
+  const resultType = String(p.result_type || "").toLowerCase();
+  const streetConfidence =
+    p.rank && p.rank.confidence_street_level != null
+      ? Number(p.rank.confidence_street_level)
+      : p.rank && p.rank.confidence != null
+        ? Number(p.rank.confidence)
+        : null;
+  const distance = p.distance != null ? Number(p.distance) : null;
+  const lowConfidence =
+    !GEOAPIFY_STREET_TYPES.has(resultType) ||
+    (streetConfidence != null && streetConfidence < 0.5) ||
+    (distance != null && distance > 500);
   const street = firstPresent(p.street);
   const area = firstPresent(
     p.suburb,
@@ -153,6 +170,7 @@ const mapGeoapify = (feature) => {
     postcode: firstPresent(p.postcode).replace(/\s+/g, ""),
     country: firstPresent(p.country),
     displayName: firstPresent(p.formatted),
+    lowConfidence,
     provider: "geoapify"
   };
 };
@@ -326,6 +344,70 @@ const reverseWithGoogle = async (lat, lng, key) => {
 };
 
 // =====================================
+// GET /api/location/autocomplete?text=...
+// Authenticated address search for checkout autofill (no GPS needed).
+// Proxied through the backend so the Geoapify key stays server-side.
+// =====================================
+const autocompleteAddress = async (req, res) => {
+  try {
+    const text = String(req.query.text || "").trim();
+    if (text.length < 3 || text.length > 200) {
+      return res.status(400).json({
+        success: false,
+        message: "Type at least 3 characters to search"
+      });
+    }
+    const key = process.env.GEOAPIFY_API_KEY;
+    if (!key) {
+      return res.status(503).json({
+        success: false,
+        message: "Address search is not configured. Please enter your address manually."
+      });
+    }
+    let data;
+    try {
+      data = await fetchJson(
+        `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(text)}&format=json&limit=5&lang=en&apiKey=${encodeURIComponent(key)}`
+      );
+    } catch (error) {
+      if (error.httpStatus === 401 || error.httpStatus === 403) {
+        return res.status(502).json({
+          success: false,
+          message: "Unable to search addresses right now. Please enter your address manually."
+        });
+      }
+      throw error;
+    }
+    const features = data.results || data.features || [];
+    const suggestions = features.slice(0, 5).map((feature, index) => ({
+      id: String(
+        geoProps(feature).place_id ||
+          feature.place_id ||
+          `${text}-${index}`
+      ),
+      ...mapGeoapify(feature)
+    }));
+    return res.status(200).json({
+      success: true,
+      count: suggestions.length,
+      suggestions
+    });
+  } catch (error) {
+    if (error.name === "AbortError") {
+      return res.status(504).json({
+        success: false,
+        message: "Address search timed out. Please try again."
+      });
+    }
+    console.error("Autocomplete error:", error.message);
+    return res.status(502).json({
+      success: false,
+      message: "Unable to search addresses right now. Please enter your address manually."
+    });
+  }
+};
+
+// =====================================
 // GET /api/location/reverse?lat=..&lng=..
 // Authenticated one-shot reverse geocode for checkout autofill.
 // Coordinates are used transiently and never stored.
@@ -448,5 +530,6 @@ const reverseGeocode = async (req, res) => {
 };
 
 module.exports = {
-  reverseGeocode
+  reverseGeocode,
+  autocompleteAddress
 };
