@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
@@ -36,7 +36,16 @@ function Checkout() {
   const [status, setStatus] = useState("idle");
   const [placedOrder, setPlacedOrder] = useState(null);
   const [locationNote, setLocationNote] = useState("");
+  const [locationOk, setLocationOk] = useState(false);
   const [locating, setLocating] = useState(false);
+  const restoreTimer = useRef(null);
+
+  // Restore the location button text after a successful detection.
+  useEffect(() => {
+    return () => {
+      if (restoreTimer.current) clearTimeout(restoreTimer.current);
+    };
+  }, []);
   // Backend-validated coupon (amounts come from /coupons/validate).
   const [coupon, setCoupon] = useState(null);
 
@@ -122,28 +131,85 @@ function Checkout() {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
+  // Merge a reverse-geocoded address into the existing form.
+  // Explicit location request: detected values fill their fields, but
+  // fields the geocoder cannot determine keep the user's input.
+  // Flat is never invented: it only fills from an actual house number
+  // when the user hasn't typed one. Everything stays editable.
+  const applyDetectedAddress = (detected) => {
+    setForm((prev) => {
+      const streetParts = [detected.street, detected.area].filter(
+        (part, index, all) =>
+          part && part.trim() !== "" && all.indexOf(part) === index
+      );
+      return {
+        ...prev,
+        flat:
+          prev.flat.trim() !== ""
+            ? prev.flat
+            : detected.houseNumber || prev.flat,
+        street:
+          streetParts.length > 0 ? streetParts.join(", ") : prev.street,
+        landmark: detected.landmark || prev.landmark,
+        city: detected.city || prev.city,
+        state: detected.state || prev.state,
+        pincode: detected.postcode || prev.pincode,
+      };
+    });
+  };
+
+  // One-time current-location lookup: browser geolocation (on click
+  // only, never tracked) + backend reverse geocode -> autofill.
   const handleUseLocation = () => {
+    if (locating) return;
     if (!("geolocation" in navigator)) {
+      setLocationOk(false);
       setLocationNote(
         "Location is not available on this device. Please enter your address manually."
       );
       return;
     }
     setLocating(true);
-    setLocationNote("");
+    setLocationOk(false);
+    setLocationNote("Detecting your location...");
     navigator.geolocation.getCurrentPosition(
-      () => {
-        setLocating(false);
-        setLocationNote(
-          "Location access granted. Please still enter your delivery address manually so the kitchen has the full details."
-        );
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+          const res = await api.get("/location/reverse", {
+            params: { lat: latitude, lng: longitude },
+            timeout: 15000,
+          });
+          applyDetectedAddress(res.data.address || {});
+          setLocationOk(true);
+          setLocationNote("Location detected. Address filled.");
+          if (restoreTimer.current) clearTimeout(restoreTimer.current);
+          restoreTimer.current = setTimeout(() => setLocationOk(false), 3500);
+        } catch {
+          setLocationOk(false);
+          setLocationNote(
+            "Location detected, but we couldn't find the address. Please enter it manually."
+          );
+        } finally {
+          setLocating(false);
+        }
       },
-      () => {
+      (geoError) => {
         setLocating(false);
-        setLocationNote(
-          "Location permission was denied or unavailable. Please enter your address manually."
-        );
-      }
+        setLocationOk(false);
+        if (geoError?.code === 1) {
+          setLocationNote(
+            "Location permission was denied. Please allow location access or enter your address manually."
+          );
+        } else if (geoError?.code === 3) {
+          setLocationNote("Location detection timed out. Please try again.");
+        } else {
+          setLocationNote(
+            "Unable to detect your location. Please enter your address manually."
+          );
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     );
   };
 
@@ -284,13 +350,41 @@ function Checkout() {
                   type="button"
                   onClick={handleUseLocation}
                   disabled={locating}
-                  className="text-sm border border-charcoal/20 rounded-full px-4 py-1.5 hover:border-burgundy hover:text-burgundy transition-colors disabled:opacity-50"
+                  className="text-sm border border-charcoal/20 rounded-full px-4 py-1.5 hover:border-burgundy hover:text-burgundy transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
                 >
-                  {locating ? "Locating..." : "Use My Current Location"}
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={1.8}
+                    aria-hidden
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"
+                    />
+                  </svg>
+                  {locating
+                    ? "Detecting Location..."
+                    : locationOk
+                      ? "Location Detected ✓"
+                      : "Use My Current Location"}
                 </button>
               </div>
               {locationNote && (
-                <p className="mt-3 text-sm text-charcoal/60">{locationNote}</p>
+                <p
+                  role="status"
+                  className={`mt-3 text-sm ${locationOk ? "text-pine font-medium" : "text-charcoal/60"}`}
+                >
+                  {locationNote}
+                </p>
               )}
               <div className="mt-4 grid sm:grid-cols-2 gap-4">
                 <div>

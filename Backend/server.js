@@ -13,6 +13,7 @@ const userRoutes = require("./routes/userRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const reviewRoutes = require("./routes/reviewRoutes");
 const couponRoutes = require("./routes/couponRoutes");
+const locationRoutes = require("./routes/locationRoutes");
 
 const app = express();
 
@@ -42,6 +43,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/coupons", couponRoutes);
+app.use("/api/location", locationRoutes);
 
 // Test route
 app.get("/", (req, res) => {
