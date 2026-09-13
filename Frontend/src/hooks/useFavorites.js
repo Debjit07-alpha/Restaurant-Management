@@ -22,7 +22,26 @@ const store = {
 
 const listeners = new Set();
 
+// Immutable snapshot for useSyncExternalStore. The internal `store` is
+// mutated, but every emit() publishes a NEW snapshot object — otherwise
+// React sees the same reference (Object.is) and skips re-rendering, which
+// is why hearts/toasts only refreshed after navigation.
+let currentSnapshot = {
+  ids: [],
+  loading: false,
+  pendingId: null,
+  notice: null, // { type: "success" | "error", text }
+  version: 0, // bumped after every successful mutation
+};
+
 function emit() {
+  currentSnapshot = {
+    ids: [...store.ids],
+    loading: store.loading,
+    pendingId: store.pendingId,
+    notice: store.notice,
+    version: store.version,
+  };
   listeners.forEach((listener) => listener());
 }
 
@@ -34,11 +53,11 @@ function subscribe(listener) {
 }
 
 function getSnapshot() {
-  return store;
+  return currentSnapshot;
 }
 
 function getServerSnapshot() {
-  return store;
+  return currentSnapshot;
 }
 
 function setNotice(type, text) {

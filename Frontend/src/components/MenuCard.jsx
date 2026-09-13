@@ -5,11 +5,13 @@ import { useFavorites } from "../hooks/useFavorites";
 import MenuImage from "./MenuImage";
 
 function MenuCard({ item }) {
-  const { addItem } = useCart();
+  const { cartItems, addItem, increaseQty, decreaseQty, removeItem } = useCart();
   const { isFavorite, toggleFavorite, pendingId } = useFavorites();
   const outOfStock = !item.availability;
   const favorite = isFavorite(item._id);
   const toggling = pendingId === item._id;
+  const cartQty =
+    cartItems.find((entry) => entry.id === item._id)?.quantity || 0;
   const shortDescription =
     item.description && item.description.length > 80
       ? item.description.slice(0, 80) + "..."
@@ -40,11 +42,12 @@ function MenuCard({ item }) {
             {item.category}
           </span>
         )}
-        <button
-          onClick={() => toggleFavorite(item._id)}
-          disabled={toggling}
-          aria-label={favorite ? `Remove ${item.name} from favorites` : `Save ${item.name} to favorites`}
-          className="absolute top-3 right-3 w-9 h-9 rounded-full bg-cream/95 shadow-sm flex items-center justify-center hover:scale-105 transition-transform disabled:opacity-50"
+          <button
+            onClick={() => toggleFavorite(item._id)}
+            disabled={toggling}
+            aria-label={favorite ? `Remove ${item.name} from favorites` : `Save ${item.name} to favorites`}
+            aria-pressed={favorite}
+            className="absolute top-3 right-3 w-9 h-9 rounded-full bg-cream/95 shadow-sm flex items-center justify-center hover:scale-105 active:scale-95 transition-transform disabled:opacity-50"
         >
           <svg
             className={`w-[18px] h-[18px] ${favorite ? "text-burgundy" : "text-charcoal/40"}`}
@@ -79,14 +82,49 @@ function MenuCard({ item }) {
           <p className="text-[19px] font-bold text-burgundy">
             {formatPrice(item.price)}
           </p>
-          <button
-            onClick={() => addItem(item, 1)}
-            disabled={outOfStock}
-            aria-label={`Add ${item.name} to cart`}
-            className="w-11 h-11 rounded-full bg-burgundy text-white text-[22px] leading-none flex items-center justify-center hover:bg-burgundy-dark transition-colors disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_8px_18px_-8px_rgba(217,45,32,0.8)]"
-          >
-            +
-          </button>
+          {cartQty === 0 ? (
+            <button
+              onClick={() => addItem(item, 1)}
+              disabled={outOfStock}
+              aria-label={`Add ${item.name} to cart`}
+              className="w-11 h-11 rounded-full bg-burgundy text-white text-[22px] leading-none flex items-center justify-center hover:bg-burgundy-dark active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_8px_18px_-8px_rgba(217,45,32,0.8)]"
+            >
+              +
+            </button>
+          ) : (
+            <div
+              className="flex items-center gap-1 h-11 pl-1.5 pr-1.5 rounded-full bg-burgundy text-white shadow-[0_8px_18px_-8px_rgba(217,45,32,0.8)]"
+              role="group"
+              aria-label={`${item.name} quantity in cart`}
+            >
+              <button
+                onClick={() =>
+                  cartQty <= 1 ? removeItem(item._id) : decreaseQty(item._id)
+                }
+                aria-label={
+                  cartQty <= 1
+                    ? `Remove ${item.name} from cart`
+                    : `Decrease ${item.name} quantity`
+                }
+                className="w-8 h-8 rounded-full text-[20px] leading-none flex items-center justify-center hover:bg-white/15 active:scale-95 transition-all"
+              >
+                −
+              </button>
+              <span
+                aria-live="polite"
+                className="min-w-6 text-center text-[15px] font-bold tabular-nums"
+              >
+                {cartQty}
+              </span>
+              <button
+                onClick={() => increaseQty(item._id)}
+                aria-label={`Increase ${item.name} quantity`}
+                className="w-8 h-8 rounded-full text-[20px] leading-none flex items-center justify-center hover:bg-white/15 active:scale-95 transition-all"
+              >
+                +
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </article>
