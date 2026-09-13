@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../api/axios";
+import CustomizationEditor from "./CustomizationEditor";
 
 const CATEGORIES = ["Starter", "Main Course", "Dessert", "Beverage"];
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -18,6 +19,7 @@ function AddMenuItem() {
   });
   const [imageFile, setImageFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
+  const [customizations, setCustomizations] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -75,6 +77,9 @@ function AddMenuItem() {
         data.append("image", imageFile);
       } else {
         data.append("image", form.image.trim());
+      }
+      if (customizations.length > 0) {
+        data.append("customizationOptions", JSON.stringify(customizations));
       }
 
       await api.post("/menu-items", data);
@@ -196,6 +201,8 @@ function AddMenuItem() {
             uploaded file is used. Leave both empty to save without an image.
           </p>
         </div>
+
+        <CustomizationEditor value={customizations} onChange={setCustomizations} />
 
         <button
           type="submit"

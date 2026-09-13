@@ -15,6 +15,90 @@ const ORDER_STATUSES = [
   "Cancelled"
 ];
 
+// Validate a cart entry's customization against the menu item's own
+// options (prices always come from the database, never the frontend).
+// Returns { unitExtras, snapshot } or throws with a user-facing message.
+const MAX_INSTRUCTIONS_LENGTH = 200;
+
+const resolveCustomization = (menuItem, customization) => {
+  if (customization === undefined || customization === null) {
+    return { unitExtras: 0, snapshot: undefined };
+  }
+
+  const groups = Array.isArray(menuItem.customizationOptions)
+    ? menuItem.customizationOptions
+    : [];
+  const selections = Array.isArray(customization.selections)
+    ? customization.selections
+    : [];
+
+  if (selections.length === 0 && !customization.specialInstructions) {
+    return { unitExtras: 0, snapshot: undefined };
+  }
+
+  if (groups.length === 0) {
+    throw new Error(`${menuItem.name} does not support customization`);
+  }
+
+  const seen = new Set();
+  let unitExtras = 0;
+  const snapshotSelections = [];
+
+  for (const sel of selections) {
+    const group = groups.find((g) => g.name === sel?.group);
+    if (!group) {
+      throw new Error(`Invalid customization option for ${menuItem.name}`);
+    }
+    if (seen.has(group.name)) {
+      throw new Error(`Duplicate customization option for ${menuItem.name}`);
+    }
+    seen.add(group.name);
+
+    const names = Array.isArray(sel.choices) ? sel.choices : [];
+    if (group.type !== "multiple" && names.length > 1) {
+      throw new Error(`Choose only one option for "${group.name}"`);
+    }
+    if (group.required && names.length === 0) {
+      throw new Error(`"${group.name}" selection is required`);
+    }
+
+    const choices = [];
+    for (const name of names) {
+      const option = (group.options || []).find((o) => o.name === name);
+      if (!option) {
+        throw new Error(`Invalid customization option for ${menuItem.name}`);
+      }
+      unitExtras += Number(option.price) || 0;
+      choices.push({ name: option.name, price: Number(option.price) || 0 });
+    }
+    snapshotSelections.push({ group: group.name, choices });
+  }
+
+  // Required groups the customer skipped entirely.
+  for (const group of groups) {
+    if (group.required && !seen.has(group.name)) {
+      throw new Error(`"${group.name}" selection is required`);
+    }
+  }
+
+  let specialInstructions = "";
+  if (customization.specialInstructions !== undefined) {
+    specialInstructions = String(customization.specialInstructions).slice(
+      0,
+      MAX_INSTRUCTIONS_LENGTH
+    );
+  }
+
+  if (snapshotSelections.length === 0 && !specialInstructions) {
+    return { unitExtras: 0, snapshot: undefined };
+  }
+
+  return {
+    unitExtras,
+    snapshot: { selections: snapshotSelections, specialInstructions }
+  };
+};
+
 // Readable customer-facing identifier, e.g. TB-20260911-A1B2C3
 const generateOrderId = () => {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
@@ -111,13 +195,35 @@ const createOrder = async (req, res) => {
         });
       }
 
+      // Customized entries: validate selections against the menu item's
+      // own options and price extras from the database (never the frontend).
+      let unitExtras = 0;
+      let customizationSnapshot;
+      try {
+        const resolved = resolveCustomization(
+          menuItem,
+          entry.customization
+        );
+        unitExtras = resolved.unitExtras;
+        customizationSnapshot = resolved.snapshot;
+      } catch (customError) {
+        return res.status(400).json({
+          success: false,
+          message: customError.message
+        });
+      }
+
+      const unitPrice = menuItem.price + unitExtras;
       orderItems.push({
         menuItem: menuItem._id,
         name: menuItem.name,
-        price: menuItem.price,
+        price: unitPrice,
         quantity,
-        subtotal: menuItem.price * quantity,
-        image: menuItem.image || ""
+        subtotal: unitPrice * quantity,
+        image: menuItem.image || "",
+        ...(customizationSnapshot
+          ? { customization: customizationSnapshot }
+          : {})
       });
     }
 

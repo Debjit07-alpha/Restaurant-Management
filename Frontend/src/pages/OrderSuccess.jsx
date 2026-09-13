@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import api from "../api/axios";
 import { formatPrice } from "../utils/formatPrice";
 import MenuImage from "../components/MenuImage";
+import CustomizationLines from "../components/CustomizationLines";
 
 function formatAddress(address) {
   if (!address) return "";
@@ -116,6 +117,10 @@ function OrderSuccess() {
                       <p className="text-sm text-charcoal/60">
                         {formatPrice(item.price)} × {item.quantity}
                       </p>
+                      <CustomizationLines
+                        customization={item.customization}
+                        compact
+                      />
                     </div>
                     <p className="font-medium whitespace-nowrap">
                       {formatPrice(item.subtotal)}

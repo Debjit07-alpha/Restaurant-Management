@@ -5,7 +5,9 @@ import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { formatPrice } from "../utils/formatPrice";
 import { getDeliveryCharge } from "../utils/delivery";
+import { toOrderCustomization } from "../utils/customization";
 import MenuImage from "../components/MenuImage";
+import CustomizationLines from "../components/CustomizationLines";
 
 const inputClass =
   "mt-1 w-full border border-charcoal/20 rounded-xl px-3 py-2 bg-cream focus:outline-none focus:border-burgundy";
@@ -181,6 +183,14 @@ function Checkout() {
         items: cartItems.map((entry) => ({
           menuItem: entry.id,
           quantity: entry.quantity,
+          ...(entry.customization
+            ? {
+                customization: toOrderCustomization(
+                  entry.customization.selections,
+                  entry.customization.specialInstructions
+                ),
+              }
+            : {}),
         })),
       });
       // The backend confirmed the order is stored: show inline success
@@ -403,7 +413,7 @@ function Checkout() {
             <h2 className="font-display text-2xl">Your Order</h2>
             <div className="mt-4 space-y-4">
               {cartItems.map((entry) => (
-                <div key={entry.id} className="flex items-center gap-3">
+                <div key={entry.key} className="flex items-center gap-3">
                   <div className="w-14 h-14 shrink-0 overflow-hidden rounded-xl bg-cream-dark">
                     <MenuImage
                       src={entry.image}
@@ -416,6 +426,10 @@ function Checkout() {
                     <p className="text-sm text-charcoal/60">
                       {formatPrice(entry.price)} × {entry.quantity}
                     </p>
+                    <CustomizationLines
+                      customization={entry.customization}
+                      compact
+                    />
                   </div>
                   <p className="font-medium whitespace-nowrap">
                     {formatPrice(entry.price * entry.quantity)}

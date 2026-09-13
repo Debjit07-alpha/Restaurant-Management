@@ -1,16 +1,75 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 import { formatPrice } from "../utils/formatPrice";
 import { getDeliveryCharge } from "../utils/delivery";
 import MenuImage from "../components/MenuImage";
+import CustomizationModal from "../components/CustomizationModal";
+import CustomizationLines from "../components/CustomizationLines";
 
 function Cart() {
   const navigate = useNavigate();
-  const { cartItems, increaseQty, decreaseQty, removeItem, totalPrice } =
+  const { cartItems, increaseQty, decreaseQty, removeItem, updateCartItem, totalPrice } =
     useCart();
+  const [customizeState, setCustomizeState] = useState(null);
+  // { key, item (modal-compatible), initial, isEdit }
 
   const deliveryCharge = getDeliveryCharge(totalPrice);
   const grandTotal = totalPrice + deliveryCharge;
+
+  const optionGroupsOf = (entry) =>
+    entry.customization?.optionGroups || entry.optionGroups || [];
+
+  // Rebuild a modal-compatible item from the cart line. Groups were snapshotted
+  // when the item was added, so both Customize and Edit restore correctly.
+  const buildModalItem = (entry) => ({
+    _id: entry.id,
+    name: entry.name,
+    price: entry.customization?.basePrice ?? entry.price,
+    image: entry.image,
+    category: entry.category,
+    availability: true,
+    customizationOptions: optionGroupsOf(entry),
+  });
+
+  // First-time customization of a plain cart line.
+  const openCustomize = (entry) => {
+    setCustomizeState({
+      key: entry.key,
+      item: buildModalItem(entry),
+      initial: {
+        quantity: entry.quantity,
+        selections: [],
+        specialInstructions: "",
+      },
+      isEdit: false,
+    });
+  };
+
+  // Re-edit an already customized line with selections restored.
+  const openEdit = (entry) => {
+    setCustomizeState({
+      key: entry.key,
+      item: buildModalItem(entry),
+      initial: {
+        quantity: entry.quantity,
+        selections: entry.customization?.selections || [],
+        specialInstructions:
+          entry.customization?.specialInstructions || "",
+      },
+      isEdit: true,
+    });
+  };
+
+  const handleCustomizeConfirm = (data) => {
+    if (!customizeState) return false;
+    const ok = updateCartItem(customizeState.key, {
+      ...data,
+      menuItem: customizeState.item,
+    });
+    if (ok) setCustomizeState(null);
+    return ok;
+  };
 
   if (cartItems.length === 0) {
     return (
@@ -49,7 +108,7 @@ function Cart() {
           <div className="space-y-4">
             {cartItems.map((entry) => (
               <div
-                key={entry.id}
+                key={entry.key}
                 className="bg-white border border-charcoal/10 rounded-[20px] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4 shadow-[0_15px_35px_-24px_rgba(23,23,23,0.35)]"
               >
                 <div className="w-full sm:w-28 shrink-0 overflow-hidden rounded-2xl bg-cream-dark">
@@ -70,10 +129,11 @@ function Cart() {
                   <p className="text-burgundy font-bold mt-1">
                     {formatPrice(entry.price)}
                   </p>
+                  <CustomizationLines customization={entry.customization} />
                   <div className="mt-2.5 flex items-center gap-2.5">
                     <div className="flex items-center gap-2 border border-charcoal/15 rounded-full px-1.5 py-1">
                       <button
-                        onClick={() => decreaseQty(entry.id)}
+                        onClick={() => decreaseQty(entry.key)}
                         className="w-7 h-7 rounded-full hover:bg-cream-dark transition-colors"
                         aria-label="Decrease quantity"
                       >
@@ -83,15 +143,32 @@ function Cart() {
                         {entry.quantity}
                       </span>
                       <button
-                        onClick={() => increaseQty(entry.id)}
+                        onClick={() => increaseQty(entry.key)}
                         className="w-7 h-7 rounded-full hover:bg-cream-dark transition-colors"
                         aria-label="Increase quantity"
                       >
                         +
                       </button>
                     </div>
+                    {entry.customization ? (
+                      <button
+                        onClick={() => openEdit(entry)}
+                        className="text-sm font-medium text-pine hover:underline underline-offset-2"
+                      >
+                        Edit
+                      </button>
+                    ) : (
+                      optionGroupsOf(entry).length > 0 && (
+                        <button
+                          onClick={() => openCustomize(entry)}
+                          className="text-sm font-medium text-pine hover:underline underline-offset-2"
+                        >
+                          Customize
+                        </button>
+                      )
+                    )}
                     <button
-                      onClick={() => removeItem(entry.id)}
+                      onClick={() => removeItem(entry.key)}
                       className="text-sm text-charcoal/50 hover:text-burgundy transition-colors ml-1"
                     >
                       Remove
@@ -145,6 +222,15 @@ function Cart() {
           </aside>
         </div>
       </div>
+      {customizeState && (
+        <CustomizationModal
+          item={customizeState.item}
+          mode="edit"
+          initial={customizeState.initial}
+          onClose={() => setCustomizeState(null)}
+          onConfirm={handleCustomizeConfirm}
+        />
+      )}
     </div>
   );
 }

@@ -10,8 +10,12 @@ function MenuCard({ item }) {
   const outOfStock = !item.availability;
   const favorite = isFavorite(item._id);
   const toggling = pendingId === item._id;
-  const cartQty =
-    cartItems.find((entry) => entry.id === item._id)?.quantity || 0;
+  // The inline stepper reflects plain (non-customized) cart lines only;
+  // customized configurations are managed via the Cart -> Customize flow.
+  const plainEntry = cartItems.find(
+    (entry) => entry.id === item._id && !entry.customization
+  );
+  const cartQty = plainEntry?.quantity || 0;
   const shortDescription =
     item.description && item.description.length > 80
       ? item.description.slice(0, 80) + "..."
@@ -99,7 +103,7 @@ function MenuCard({ item }) {
             >
               <button
                 onClick={() =>
-                  cartQty <= 1 ? removeItem(item._id) : decreaseQty(item._id)
+                  cartQty <= 1 ? removeItem(plainEntry.key) : decreaseQty(plainEntry.key)
                 }
                 aria-label={
                   cartQty <= 1
@@ -117,7 +121,7 @@ function MenuCard({ item }) {
                 {cartQty}
               </span>
               <button
-                onClick={() => increaseQty(item._id)}
+                onClick={() => increaseQty(plainEntry.key)}
                 aria-label={`Increase ${item.name} quantity`}
                 className="w-8 h-8 rounded-full text-[20px] leading-none flex items-center justify-center hover:bg-white/15 active:scale-95 transition-all"
               >

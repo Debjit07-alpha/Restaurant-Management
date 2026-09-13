@@ -34,6 +34,32 @@ const orderItemSchema = new mongoose.Schema(
     image: {
       type: String,
       default: ""
+    },
+
+    // Snapshot of the customization chosen in the cart (unit price already
+    // includes validated extras; see orderController). Absent for plain items.
+    customization: {
+      type: {
+        selections: {
+          type: [
+            {
+              group: { type: String, required: true },
+              choices: {
+                type: [
+                  {
+                    name: { type: String, required: true },
+                    price: { type: Number, required: true, min: 0 }
+                  }
+                ],
+                default: []
+              }
+            }
+          ],
+          default: []
+        },
+        specialInstructions: { type: String, default: "", trim: true }
+      },
+      default: undefined
     }
   },
   { _id: false }

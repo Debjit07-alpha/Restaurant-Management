@@ -11,6 +11,7 @@ import {
 } from "../utils/orderStatus";
 import { useReorder } from "../hooks/useReorder";
 import MenuImage from "../components/MenuImage";
+import CustomizationLines from "../components/CustomizationLines";
 
 function formatDateTime(value) {
   if (!value) return "—";
@@ -280,6 +281,10 @@ function OrderDetails() {
                     <p className="text-sm text-charcoal/60">
                       {formatPrice(item.price)} × {item.quantity}
                     </p>
+                    <CustomizationLines
+                      customization={item.customization}
+                      compact
+                    />
                   </div>
                   <p className="font-medium whitespace-nowrap">
                     {formatPrice(item.subtotal)}

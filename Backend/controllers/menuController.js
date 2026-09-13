@@ -18,6 +18,54 @@ const parseAvailability = (value, fallback = true) => {
   return fallback;
 };
 
+// Accept customizationOptions from JSON callers or as a JSON string from
+// multipart/form-data. Returns undefined when absent/invalid so the field
+// stays unset; throws with a message on structurally invalid input.
+const sanitizeCustomizationOptions = (value) => {
+  if (value === undefined || value === null || value === "") return undefined;
+  let parsed = value;
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      throw new Error("customizationOptions must be valid JSON");
+    }
+  }
+  if (!Array.isArray(parsed)) {
+    throw new Error("customizationOptions must be an array");
+  }
+  if (parsed.length > 10) {
+    throw new Error("A maximum of 10 customization groups is allowed");
+  }
+  return parsed.map((group) => {
+    if (!group || typeof group.name !== "string" || !group.name.trim()) {
+      throw new Error("Each customization group needs a name");
+    }
+    const type = group.type === "multiple" ? "multiple" : "single";
+    if (!Array.isArray(group.options) || group.options.length === 0) {
+      throw new Error(`"${group.name}" needs at least one option`);
+    }
+    if (group.options.length > 20) {
+      throw new Error(`"${group.name}" allows a maximum of 20 options`);
+    }
+    return {
+      name: group.name.trim().slice(0, 60),
+      type,
+      required: group.required === true,
+      options: group.options.map((opt) => {
+        if (!opt || typeof opt.name !== "string" || !opt.name.trim()) {
+          throw new Error(`"${group.name}" has an option without a name`);
+        }
+        const price = Number(opt.price) || 0;
+        if (price < 0) {
+          throw new Error(`"${opt.name}" has an invalid price`);
+        }
+        return { name: opt.name.trim().slice(0, 60), price };
+      })
+    };
+  });
+};
+
 // Upload a Multer memory-storage buffer to Cloudinary.
 const uploadBufferToCloudinary = (file) => {
   const dataUri = `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
@@ -113,6 +161,18 @@ const createMenuItem = async (req, res) => {
       });
     }
 
+    let customizationOptions;
+    try {
+      customizationOptions = sanitizeCustomizationOptions(
+        req.body.customizationOptions
+      );
+    } catch (sanitizeError) {
+      return res.status(400).json({
+        success: false,
+        message: sanitizeError.message
+      });
+    }
+
     const numericPrice = Number(price);
 
     if (Number.isNaN(numericPrice)) {
@@ -153,7 +213,8 @@ const createMenuItem = async (req, res) => {
       category,
       price: numericPrice,
       availability: parseAvailability(availability, true),
-      image: imageUrl || ""
+      image: imageUrl || "",
+      ...(customizationOptions !== undefined ? { customizationOptions } : {})
     });
 
     res.status(201).json({
@@ -197,6 +258,22 @@ const updateMenuItem = async (req, res) => {
     menuItem.name = name ?? menuItem.name;
     menuItem.description = description ?? menuItem.description;
     menuItem.category = category ?? menuItem.category;
+    if (req.body.customizationOptions !== undefined) {
+      let nextOptions;
+      try {
+        nextOptions = sanitizeCustomizationOptions(
+          req.body.customizationOptions
+        );
+      } catch (sanitizeError) {
+        return res.status(400).json({
+          success: false,
+          message: sanitizeError.message
+        });
+      }
+      // Empty array (or empty value) clears customization; otherwise replace.
+      menuItem.customizationOptions =
+        !nextOptions || nextOptions.length === 0 ? undefined : nextOptions;
+    }
     if (price !== undefined && price !== "") {
       const numericPrice = Number(price);
       if (Number.isNaN(numericPrice)) {

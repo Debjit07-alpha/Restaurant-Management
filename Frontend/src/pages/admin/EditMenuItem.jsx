@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "../../api/axios";
 import MenuImage from "../../components/MenuImage";
+import CustomizationEditor from "./CustomizationEditor";
 
 const CATEGORIES = ["Starter", "Main Course", "Dessert", "Beverage"];
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -20,6 +21,8 @@ function EditMenuItem() {
   });
   const [imageFile, setImageFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
+  const [customizations, setCustomizations] = useState([]);
+  const [customizationsTouched, setCustomizationsTouched] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -38,6 +41,11 @@ function EditMenuItem() {
           availability: item.availability ? "inStock" : "outOfStock",
           image: item.image || "",
         });
+        setCustomizations(
+          Array.isArray(item.customizationOptions)
+            ? item.customizationOptions
+            : []
+        );
       } catch {
         setError("Unable to load menu item.");
       } finally {
@@ -103,6 +111,10 @@ function EditMenuItem() {
       } else {
         // No new file: keep (or update) the existing image URL.
         data.append("image", form.image.trim());
+      }
+      if (customizationsTouched) {
+        // Replace (or clear, when empty) the customization groups.
+        data.append("customizationOptions", JSON.stringify(customizations));
       }
 
       await api.put(`/menu-items/${id}`, data);
@@ -237,6 +249,14 @@ function EditMenuItem() {
             selected, the URL above is kept.
           </p>
         </div>
+
+        <CustomizationEditor
+          value={customizations}
+          onChange={(next) => {
+            setCustomizations(next);
+            setCustomizationsTouched(true);
+          }}
+        />
 
         <button
           type="submit"
