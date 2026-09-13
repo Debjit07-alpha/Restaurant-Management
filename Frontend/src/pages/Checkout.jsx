@@ -158,9 +158,18 @@ function Checkout() {
     });
   };
 
+  // One-shot position request wrapped as a promise.
+  const requestPosition = (options) =>
+    new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, options);
+    });
+
   // One-time current-location lookup: browser geolocation (on click
   // only, never tracked) + backend reverse geocode -> autofill.
-  const handleUseLocation = () => {
+  // Two-phase fix for the classic timeout: precise GPS first, then an
+  // automatic low-power retry (desktops and indoor phones often cannot
+  // produce a high-accuracy fix within one short timeout).
+  const handleUseLocation = async () => {
     if (locating) return;
     if (!("geolocation" in navigator)) {
       setLocationOk(false);
@@ -172,45 +181,60 @@ function Checkout() {
     setLocating(true);
     setLocationOk(false);
     setLocationNote("Detecting your location...");
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const { latitude, longitude } = position.coords;
-          const res = await api.get("/location/reverse", {
-            params: { lat: latitude, lng: longitude },
-            timeout: 15000,
-          });
-          applyDetectedAddress(res.data.address || {});
-          setLocationOk(true);
-          setLocationNote("Location detected. Address filled.");
-          if (restoreTimer.current) clearTimeout(restoreTimer.current);
-          restoreTimer.current = setTimeout(() => setLocationOk(false), 3500);
-        } catch {
-          setLocationOk(false);
-          setLocationNote(
-            "Location detected, but we couldn't find the address. Please enter it manually."
-          );
-        } finally {
-          setLocating(false);
-        }
-      },
-      (geoError) => {
-        setLocating(false);
+    try {
+      let position;
+      try {
+        position = await requestPosition({
+          enableHighAccuracy: true,
+          timeout: 12000,
+          maximumAge: 60000,
+        });
+      } catch (firstError) {
+        // Permission denied will not improve on retry: fail fast.
+        // Timeout / unavailable: retry once with network-based fix.
+        if (firstError?.code === 1) throw firstError;
+        setLocationNote("Still detecting your location...");
+        position = await requestPosition({
+          enableHighAccuracy: false,
+          timeout: 15000,
+          maximumAge: 60000,
+        });
+      }
+      const { latitude, longitude } = position.coords;
+      try {
+        const res = await api.get("/location/reverse", {
+          params: { lat: latitude, lng: longitude },
+          timeout: 20000,
+        });
+        applyDetectedAddress(res.data.address || {});
+        setLocationOk(true);
+        setLocationNote("Location detected. Address filled.");
+        if (restoreTimer.current) clearTimeout(restoreTimer.current);
+        restoreTimer.current = setTimeout(() => setLocationOk(false), 3500);
+      } catch {
         setLocationOk(false);
-        if (geoError?.code === 1) {
-          setLocationNote(
-            "Location permission was denied. Please allow location access or enter your address manually."
-          );
-        } else if (geoError?.code === 3) {
-          setLocationNote("Location detection timed out. Please try again.");
-        } else {
-          setLocationNote(
-            "Unable to detect your location. Please enter your address manually."
-          );
-        }
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-    );
+        setLocationNote(
+          "Location detected, but we couldn't find the address. Please enter it manually."
+        );
+      }
+    } catch (geoError) {
+      setLocationOk(false);
+      if (geoError?.code === 1) {
+        setLocationNote(
+          "Location permission was denied. Please allow location access or enter your address manually."
+        );
+      } else if (geoError?.code === 3) {
+        setLocationNote(
+          "Location detection timed out. Please check your connection and try again, or enter your address manually."
+        );
+      } else {
+        setLocationNote(
+          "Unable to detect your location. Please enter your address manually."
+        );
+      }
+    } finally {
+      setLocating(false);
+    }
   };
 
   const handleSubmit = async (e) => {
