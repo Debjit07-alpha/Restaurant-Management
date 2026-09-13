@@ -36,6 +36,7 @@ function Checkout() {
   const [status, setStatus] = useState("idle");
   const [placedOrder, setPlacedOrder] = useState(null);
   const [locationNote, setLocationNote] = useState("");
+  const [detectedLabel, setDetectedLabel] = useState("");
   const [locationOk, setLocationOk] = useState(false);
   const [locating, setLocating] = useState(false);
   const restoreTimer = useRef(null);
@@ -164,15 +165,75 @@ function Checkout() {
       navigator.geolocation.getCurrentPosition(resolve, reject, options);
     });
 
+  // High-accuracy fix with accuracy awareness: up to 3 fresh readings,
+  // keeps the most accurate one. Readings at or under 100m are accepted
+  // immediately; worse readings trigger retries; anything still worse
+  // than 500m is refused with a low-accuracy message. Falls back to a
+  // network-based fix only when high accuracy times out (desktops and
+  // indoor phones often cannot produce a GPS fix in one short window).
+  const BEST_READINGS = 3;
+  const GOOD_ACCURACY_M = 100;
+  const POOR_ACCURACY_M = 500;
+
+  const acquireAccuratePosition = async () => {
+    let best = null;
+    let lastError = null;
+    for (let attempt = 1; attempt <= BEST_READINGS; attempt += 1) {
+      try {
+        if (attempt > 1) {
+          setLocationNote(
+            `Improving location accuracy... (attempt ${attempt} of ${BEST_READINGS})`
+          );
+        }
+        const position = await requestPosition({
+          enableHighAccuracy: true,
+          timeout: 12000,
+          maximumAge: attempt === 1 ? 60000 : 0,
+        });
+        const accuracy = Number(position.coords.accuracy) || Infinity;
+        console.debug(`GPS accuracy: ${Math.round(accuracy)} meters`);
+        if (!best || accuracy < Number(best.coords.accuracy)) {
+          best = position;
+        }
+        if (accuracy <= GOOD_ACCURACY_M) return best;
+      } catch (error) {
+        // Permission denied never improves: stop immediately.
+        if (error?.code === 1) throw error;
+        lastError = error;
+      }
+    }
+    if (best) {
+      if (Number(best.coords.accuracy) > POOR_ACCURACY_M) {
+        const poor = new Error("Poor accuracy");
+        poor.code = "LOW_ACCURACY";
+        throw poor;
+      }
+      return best;
+    }
+    // No reading at all: try one fast network-based fix, then give up.
+    setLocationNote("Still detecting your location...");
+    try {
+      const fallback = await requestPosition({
+        enableHighAccuracy: false,
+        timeout: 15000,
+        maximumAge: 60000,
+      });
+      console.debug(
+        `GPS accuracy: ${Math.round(Number(fallback.coords.accuracy))} meters`
+      );
+      return fallback;
+    } catch {
+      throw lastError || new Error("Position unavailable");
+    }
+  };
+
   // One-time current-location lookup: browser geolocation (on click
   // only, never tracked) + backend reverse geocode -> autofill.
-  // Two-phase fix for the classic timeout: precise GPS first, then an
-  // automatic low-power retry (desktops and indoor phones often cannot
-  // produce a high-accuracy fix within one short timeout).
   const handleUseLocation = async () => {
     if (locating) return;
     if (!("geolocation" in navigator)) {
       setLocationOk(false);
+      setDetectedLabel("");
       setLocationNote(
         "Location is not available on this device. Please enter your address manually."
       );
@@ -180,53 +241,56 @@ function Checkout() {
     }
     setLocating(true);
     setLocationOk(false);
+    setDetectedLabel("");
     setLocationNote("Detecting your location...");
     try {
-      let position;
-      try {
-        position = await requestPosition({
-          enableHighAccuracy: true,
-          timeout: 12000,
-          maximumAge: 60000,
-        });
-      } catch (firstError) {
-        // Permission denied will not improve on retry: fail fast.
-        // Timeout / unavailable: retry once with network-based fix.
-        if (firstError?.code === 1) throw firstError;
-        setLocationNote("Still detecting your location...");
-        position = await requestPosition({
-          enableHighAccuracy: false,
-          timeout: 15000,
-          maximumAge: 60000,
-        });
-      }
+      const position = await acquireAccuratePosition();
       const { latitude, longitude } = position.coords;
       try {
         const res = await api.get("/location/reverse", {
           params: { lat: latitude, lng: longitude },
           timeout: 20000,
         });
-        applyDetectedAddress(res.data.address || {});
+        const detected = res.data.address || {};
+        applyDetectedAddress(detected);
+        const labelParts = [
+          detected.street,
+          detected.area,
+          detected.city,
+          detected.postcode,
+        ].filter(
+          (part, index, all) =>
+            part && part.trim() !== "" && all.indexOf(part) === index
+        );
+        setDetectedLabel(
+          labelParts.length > 0
+            ? labelParts.join(", ")
+            : detected.displayName || ""
+        );
         setLocationOk(true);
-        setLocationNote("Location detected. Address filled.");
+        setLocationNote("Location detected.");
         if (restoreTimer.current) clearTimeout(restoreTimer.current);
         restoreTimer.current = setTimeout(() => setLocationOk(false), 3500);
-      } catch {
+      } catch (err) {
         setLocationOk(false);
         setLocationNote(
-          "Location detected, but we couldn't find the address. Please enter it manually."
+          err.response?.data?.message ||
+            "Location detected, but the address could not be resolved."
         );
       }
     } catch (geoError) {
       setLocationOk(false);
+      setDetectedLabel("");
       if (geoError?.code === 1) {
         setLocationNote(
-          "Location permission was denied. Please allow location access or enter your address manually."
+          "Location permission denied. Please allow location access or enter your address manually."
+        );
+      } else if (geoError?.code === "LOW_ACCURACY") {
+        setLocationNote(
+          "Location accuracy is low. Please try again with precise location enabled."
         );
       } else if (geoError?.code === 3) {
-        setLocationNote(
-          "Location detection timed out. Please check your connection and try again, or enter your address manually."
-        );
+        setLocationNote("Location detection timed out. Please try again.");
       } else {
         setLocationNote(
           "Unable to detect your location. Please enter your address manually."
@@ -408,6 +472,12 @@ function Checkout() {
                   className={`mt-3 text-sm ${locationOk ? "text-pine font-medium" : "text-charcoal/60"}`}
                 >
                   {locationNote}
+                </p>
+              )}
+              {locationOk && detectedLabel && (
+                <p className="mt-1 text-sm text-charcoal/60">
+                  Detected location:{" "}
+                  <span className="font-medium text-charcoal">{detectedLabel}</span>
                 </p>
               )}
               <div className="mt-4 grid sm:grid-cols-2 gap-4">
