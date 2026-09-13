@@ -1,10 +1,13 @@
 const Order = require("../models/Order");
 const MenuItem = require("../models/MenuItem");
-
-// Delivery rule: free above Rs.499, otherwise Rs.40.
-// The backend always recalculates this; frontend values are never trusted.
-const FREE_DELIVERY_ABOVE = 499;
-const DELIVERY_CHARGE = 40;
+const CouponUsage = require("../models/CouponUsage");
+const {
+  FREE_DELIVERY_ABOVE,
+  DELIVERY_CHARGE,
+  getDeliveryCharge,
+  resolveCustomization
+} = require("../utils/orderPricing");
+const { validateAndPriceCoupon } = require("../utils/couponService");
 
 const PAYMENT_METHODS = ["Cash on Delivery", "UPI on Delivery"];
 const ORDER_STATUSES = [
@@ -14,90 +17,6 @@ const ORDER_STATUSES = [
   "Delivered",
   "Cancelled"
 ];
-
-// Validate a cart entry's customization against the menu item's own
-// options (prices always come from the database, never the frontend).
-// Returns { unitExtras, snapshot } or throws with a user-facing message.
-const MAX_INSTRUCTIONS_LENGTH = 200;
-
-const resolveCustomization = (menuItem, customization) => {
-  if (customization === undefined || customization === null) {
-    return { unitExtras: 0, snapshot: undefined };
-  }
-
-  const groups = Array.isArray(menuItem.customizationOptions)
-    ? menuItem.customizationOptions
-    : [];
-  const selections = Array.isArray(customization.selections)
-    ? customization.selections
-    : [];
-
-  if (selections.length === 0 && !customization.specialInstructions) {
-    return { unitExtras: 0, snapshot: undefined };
-  }
-
-  if (groups.length === 0) {
-    throw new Error(`${menuItem.name} does not support customization`);
-  }
-
-  const seen = new Set();
-  let unitExtras = 0;
-  const snapshotSelections = [];
-
-  for (const sel of selections) {
-    const group = groups.find((g) => g.name === sel?.group);
-    if (!group) {
-      throw new Error(`Invalid customization option for ${menuItem.name}`);
-    }
-    if (seen.has(group.name)) {
-      throw new Error(`Duplicate customization option for ${menuItem.name}`);
-    }
-    seen.add(group.name);
-
-    const names = Array.isArray(sel.choices) ? sel.choices : [];
-    if (group.type !== "multiple" && names.length > 1) {
-      throw new Error(`Choose only one option for "${group.name}"`);
-    }
-    if (group.required && names.length === 0) {
-      throw new Error(`"${group.name}" selection is required`);
-    }
-
-    const choices = [];
-    for (const name of names) {
-      const option = (group.options || []).find((o) => o.name === name);
-      if (!option) {
-        throw new Error(`Invalid customization option for ${menuItem.name}`);
-      }
-      unitExtras += Number(option.price) || 0;
-      choices.push({ name: option.name, price: Number(option.price) || 0 });
-    }
-    snapshotSelections.push({ group: group.name, choices });
-  }
-
-  // Required groups the customer skipped entirely.
-  for (const group of groups) {
-    if (group.required && !seen.has(group.name)) {
-      throw new Error(`"${group.name}" selection is required`);
-    }
-  }
-
-  let specialInstructions = "";
-  if (customization.specialInstructions !== undefined) {
-    specialInstructions = String(customization.specialInstructions).slice(
-      0,
-      MAX_INSTRUCTIONS_LENGTH
-    );
-  }
-
-  if (snapshotSelections.length === 0 && !specialInstructions) {
-    return { unitExtras: 0, snapshot: undefined };
-  }
-
-  return {
-    unitExtras,
-    snapshot: { selections: snapshotSelections, specialInstructions }
-  };
-};
 
 // Readable customer-facing identifier, e.g. TB-20260911-A1B2C3
 const generateOrderId = () => {
@@ -228,7 +147,31 @@ const createOrder = async (req, res) => {
     }
 
     const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
-    const deliveryCharge = subtotal > FREE_DELIVERY_ABOVE ? 0 : DELIVERY_CHARGE;
+
+    // Optional promo code: re-validated here from the database using
+    // DB prices. Frontend totals/discounts are never trusted.
+    let couponCode = "";
+    let couponId = null;
+    let discountAmount = 0;
+    if (req.body.couponCode !== undefined && req.body.couponCode !== null && String(req.body.couponCode).trim() !== "") {
+      try {
+        const priced = await validateAndPriceCoupon({
+          code: req.body.couponCode,
+          items,
+          userId: req.user.userId
+        });
+        couponCode = priced.coupon.code;
+        couponId = priced.coupon._id;
+        discountAmount = priced.discountAmount;
+      } catch (couponError) {
+        return res.status(couponError.status || 400).json({
+          success: false,
+          message: couponError.message || "Invalid coupon code"
+        });
+      }
+    }
+
+    const deliveryCharge = getDeliveryCharge(subtotal - discountAmount);
 
     // Generate a unique readable order id
     let orderId = generateOrderId();
@@ -256,11 +199,25 @@ const createOrder = async (req, res) => {
       },
       items: orderItems,
       subtotal,
+      couponCode,
+      discountAmount,
       deliveryCharge,
-      totalAmount: subtotal + deliveryCharge,
+      totalAmount: subtotal - discountAmount + deliveryCharge,
       paymentMethod: method,
       orderStatus: "Pending"
     });
+
+    // Record coupon usage AFTER the order is stored. The order id ties
+    // one redemption to exactly one order.
+    if (couponCode && couponId) {
+      const Coupon = require("../models/Coupon");
+      await Coupon.findByIdAndUpdate(couponId, { $inc: { usedCount: 1 } });
+      await CouponUsage.create({
+        coupon: couponId,
+        user: req.user.userId,
+        order: order._id
+      });
+    }
 
     res.status(201).json({
       success: true,

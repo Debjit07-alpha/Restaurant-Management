@@ -24,6 +24,7 @@ import EditMenuItem from "./pages/admin/EditMenuItem";
 import Users from "./pages/admin/Users";
 import Orders from "./pages/admin/Orders";
 import Reviews from "./pages/admin/Reviews";
+import Coupons from "./pages/admin/Coupons";
 
 function App() {
   return (
@@ -208,6 +209,16 @@ function App() {
             <ProtectedRoute>
               <AdminLayout>
                 <Reviews />
+              </AdminLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/coupons"
+          element={
+            <ProtectedRoute>
+              <AdminLayout>
+                <Coupons />
               </AdminLayout>
             </ProtectedRoute>
           }

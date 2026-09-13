@@ -400,6 +400,16 @@ function OrderDetails() {
               <span className="text-charcoal/60">Subtotal</span>
               <span className="font-medium">{formatPrice(order.subtotal)}</span>
             </p>
+            {Number(order.discountAmount) > 0 && (
+              <p className="flex justify-between text-pine">
+                <span>
+                  Discount{order.couponCode ? ` (${order.couponCode})` : ""}
+                </span>
+                <span className="font-medium">
+                  -{formatPrice(order.discountAmount)}
+                </span>
+              </p>
+            )}
             <p className="flex justify-between">
               <span className="text-charcoal/60">Delivery</span>
               <span className="font-medium">

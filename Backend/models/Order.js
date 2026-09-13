@@ -123,6 +123,21 @@ const orderSchema = new mongoose.Schema(
       min: 0
     },
 
+    // Promo code applied to this order (uppercase code or "").
+    // discountAmount is backend-computed; frontend values are ignored.
+    couponCode: {
+      type: String,
+      default: "",
+      trim: true,
+      uppercase: true
+    },
+
+    discountAmount: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+
     totalAmount: {
       type: Number,
       required: true,

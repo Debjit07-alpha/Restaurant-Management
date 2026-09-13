@@ -8,6 +8,7 @@ import { getDeliveryCharge } from "../utils/delivery";
 import { toOrderCustomization } from "../utils/customization";
 import MenuImage from "../components/MenuImage";
 import CustomizationLines from "../components/CustomizationLines";
+import CouponBox, { storeCouponCode } from "../components/CouponBox";
 
 const inputClass =
   "mt-1 w-full border border-charcoal/20 rounded-xl px-3 py-2 bg-cream focus:outline-none focus:border-burgundy";
@@ -36,6 +37,8 @@ function Checkout() {
   const [placedOrder, setPlacedOrder] = useState(null);
   const [locationNote, setLocationNote] = useState("");
   const [locating, setLocating] = useState(false);
+  // Backend-validated coupon (amounts come from /coupons/validate).
+  const [coupon, setCoupon] = useState(null);
 
   // Pre-fill name from the logged-in user (stays editable)
   useEffect(() => {
@@ -46,8 +49,10 @@ function Checkout() {
     }
   }, [user]);
 
-  const deliveryCharge = getDeliveryCharge(totalPrice);
-  const grandTotal = totalPrice + deliveryCharge;
+  const discount = coupon?.discountAmount || 0;
+  const deliveryCharge =
+    coupon?.deliveryCharge ?? getDeliveryCharge(totalPrice - discount);
+  const grandTotal = totalPrice - discount + deliveryCharge;
 
   // Success screen stays on this same page after the backend confirms.
   // It must render before the empty-cart guard because the cart is
@@ -71,6 +76,12 @@ function Checkout() {
             Order ID:{" "}
             <span className="font-bold">#{placedOrder.orderId}</span>
           </p>
+          {placedOrder.couponCode && (
+            <p className="mt-3 text-[15px] text-pine font-medium">
+              ✓ {placedOrder.couponCode} applied — you saved{" "}
+              {formatPrice(placedOrder.discountAmount || 0)}
+            </p>
+          )}
           <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
             <Link
               to="/"
@@ -180,6 +191,7 @@ function Checkout() {
           instructions: form.instructions.trim(),
         },
         paymentMethod,
+        ...(coupon?.couponCode ? { couponCode: coupon.couponCode } : {}),
         items: cartItems.map((entry) => ({
           menuItem: entry.id,
           quantity: entry.quantity,
@@ -194,9 +206,11 @@ function Checkout() {
         })),
       });
       // The backend confirmed the order is stored: show inline success
-      // on this same page, then clear the purchased cart.
+      // on this same page, then clear the purchased cart + coupon.
       setPlacedOrder(res.data.order);
       setStatus("success");
+      setCoupon(null);
+      storeCouponCode("");
       clearCart();
     } catch (err) {
       // Failure: stay on checkout, keep the cart, re-enable the button.
@@ -437,11 +451,18 @@ function Checkout() {
                 </div>
               ))}
             </div>
+            <CouponBox cartItems={cartItems} onCoupon={setCoupon} />
             <div className="mt-4 pt-4 border-t border-charcoal/10 space-y-2 text-sm">
               <p className="flex justify-between">
                 <span className="text-charcoal/60">Subtotal</span>
                 <span className="font-medium">{formatPrice(totalPrice)}</span>
               </p>
+              {discount > 0 && (
+                <p className="flex justify-between text-pine">
+                  <span>Discount{coupon?.couponCode ? ` (${coupon.couponCode})` : ""}</span>
+                  <span className="font-medium">-{formatPrice(discount)}</span>
+                </p>
+              )}
               <p className="flex justify-between">
                 <span className="text-charcoal/60">Delivery</span>
                 <span className="font-medium">

@@ -6,6 +6,7 @@ import { getDeliveryCharge } from "../utils/delivery";
 import MenuImage from "../components/MenuImage";
 import CustomizationModal from "../components/CustomizationModal";
 import CustomizationLines from "../components/CustomizationLines";
+import CouponBox from "../components/CouponBox";
 
 function Cart() {
   const navigate = useNavigate();
@@ -13,9 +14,13 @@ function Cart() {
     useCart();
   const [customizeState, setCustomizeState] = useState(null);
   // { key, item (modal-compatible), initial, isEdit }
+  // Backend-validated coupon (amounts come from /coupons/validate).
+  const [coupon, setCoupon] = useState(null);
 
-  const deliveryCharge = getDeliveryCharge(totalPrice);
-  const grandTotal = totalPrice + deliveryCharge;
+  const discount = coupon?.discountAmount || 0;
+  const deliveryCharge =
+    coupon?.deliveryCharge ?? getDeliveryCharge(totalPrice - discount);
+  const grandTotal = totalPrice - discount + deliveryCharge;
 
   const optionGroupsOf = (entry) =>
     entry.customization?.optionGroups || entry.optionGroups || [];
@@ -191,6 +196,12 @@ function Cart() {
                 <span className="text-charcoal/60">Subtotal</span>
                 <span className="font-semibold">{formatPrice(totalPrice)}</span>
               </p>
+              {discount > 0 && (
+                <p className="flex justify-between text-pine">
+                  <span>Discount{coupon?.couponCode ? ` (${coupon.couponCode})` : ""}</span>
+                  <span className="font-semibold">-{formatPrice(discount)}</span>
+                </p>
+              )}
               <p className="flex justify-between">
                 <span className="text-charcoal/60">Delivery</span>
                 <span className="font-semibold">
@@ -207,6 +218,7 @@ function Cart() {
                 <span className="text-burgundy">{formatPrice(grandTotal)}</span>
               </p>
             </div>
+            <CouponBox cartItems={cartItems} onCoupon={setCoupon} />
             <button
               onClick={() => navigate("/checkout")}
               className="mt-6 w-full bg-burgundy text-white rounded-[28px] h-[52px] text-[15px] font-semibold hover:bg-burgundy-dark transition-all hover:-translate-y-0.5 shadow-[0_10px_25px_-10px_rgba(217,45,32,0.6)]"
