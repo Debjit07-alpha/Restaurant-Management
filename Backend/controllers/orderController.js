@@ -266,11 +266,73 @@ const updateOrderStatus = async (req, res) => {
   }
 };
 
+// =============================
+// REORDER (owner or Admin)
+// Returns the order's items with CURRENT menu prices so the
+// frontend can re-add them to the cart. Unavailable / deleted
+// products are skipped, never breaking the whole reorder.
+// =============================
+const reorderOrder = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+
+    if (
+      !order ||
+      (req.user.role !== "Admin" &&
+        order.user.toString() !== req.user.userId)
+    ) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found"
+      });
+    }
+
+    const availableItems = [];
+    let skippedCount = 0;
+
+    for (const entry of order.items) {
+      const menuItem = await MenuItem.findById(entry.menuItem);
+
+      // Deleted from menu or currently out of stock -> skip it.
+      if (!menuItem || !menuItem.availability) {
+        skippedCount += 1;
+        continue;
+      }
+
+      availableItems.push({
+        menuItem: menuItem._id,
+        name: menuItem.name,
+        // CURRENT price (may differ from the historic order price)
+        price: menuItem.price,
+        image: menuItem.image || "",
+        category: menuItem.category || "",
+        // Preserve the original quantity
+        quantity: entry.quantity
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      items: availableItems,
+      skippedCount,
+      totalCount: order.items.length
+    });
+  } catch (error) {
+    console.error("Reorder error:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Server error while preparing reorder"
+    });
+  }
+};
+
 module.exports = {
   createOrder,
   getOrders,
   getOrderById,
   updateOrderStatus,
+  reorderOrder,
   FREE_DELIVERY_ABOVE,
   DELIVERY_CHARGE
 };

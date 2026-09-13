@@ -2,6 +2,16 @@ import { createContext, useContext, useEffect, useState } from "react";
 
 const AuthContext = createContext(null);
 
+// Backend returns user as { id, name, email, role } while older frontend
+// code expects user._id. Normalize once here so every consumer sees both
+// `id` and `_id` regardless of which shape was stored/persisted.
+function normalizeUser(rawUser) {
+  if (!rawUser || typeof rawUser !== "object") return rawUser;
+  const id = rawUser._id || rawUser.id || null;
+  if (!id) return rawUser;
+  return { ...rawUser, _id: id, id };
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
@@ -14,7 +24,7 @@ export function AuthProvider({ children }) {
     if (storedToken && storedUser) {
       try {
         setToken(storedToken);
-        setUser(JSON.parse(storedUser));
+        setUser(normalizeUser(JSON.parse(storedUser)));
       } catch {
         localStorage.removeItem("token");
         localStorage.removeItem("user");
@@ -24,10 +34,11 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = (newToken, newUser) => {
+    const normalized = normalizeUser(newUser);
     localStorage.setItem("token", newToken);
-    localStorage.setItem("user", JSON.stringify(newUser));
+    localStorage.setItem("user", JSON.stringify(normalized));
     setToken(newToken);
-    setUser(newUser);
+    setUser(normalized);
   };
 
   const logout = () => {
@@ -38,9 +49,10 @@ export function AuthProvider({ children }) {
   };
 
   const isAdmin = user?.role === "Admin";
+  const isAuthenticated = Boolean(token && user);
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout, isAdmin }}>
+    <AuthContext.Provider value={{ user, token, loading, login, logout, isAdmin, isAuthenticated }}>
       {children}
     </AuthContext.Provider>
   );

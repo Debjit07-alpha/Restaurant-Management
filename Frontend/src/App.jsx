@@ -1,5 +1,6 @@
 import { Route, Routes } from "react-router-dom";
 import Navbar from "./components/Navbar";
+import FavoriteNotice from "./components/FavoriteNotice";
 import ProtectedRoute from "./components/ProtectedRoute";
 import UserRoute from "./components/UserRoute";
 import AdminLayout from "./components/AdminLayout";
@@ -11,6 +12,7 @@ import Checkout from "./pages/Checkout";
 import OrderSuccess from "./pages/OrderSuccess";
 import MyOrders from "./pages/MyOrders";
 import OrderDetails from "./pages/OrderDetails";
+import Favorites from "./pages/Favorites";
 import Register from "./pages/Register";
 import Login from "./pages/Login";
 import AdminLogin from "./pages/AdminLogin";
@@ -25,6 +27,7 @@ import Orders from "./pages/admin/Orders";
 function App() {
   return (
     <div className="min-h-screen bg-cream text-charcoal">
+      <FavoriteNotice />
       <Routes>
         {/* Public / user pages with navbar */}
         <Route
@@ -103,6 +106,17 @@ function App() {
               <>
                 <Navbar />
                 <OrderDetails />
+              </>
+            </UserRoute>
+          }
+        />
+        <Route
+          path="/favorites"
+          element={
+            <UserRoute>
+              <>
+                <Navbar />
+                <Favorites />
               </>
             </UserRoute>
           }

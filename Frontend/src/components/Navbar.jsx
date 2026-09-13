@@ -193,9 +193,14 @@ function Navbar() {
           {user && (
             <>
               {!isAdmin && (
-                <Link to="/orders" className="hover:text-burgundy transition-colors font-medium whitespace-nowrap">
-                  My Orders
-                </Link>
+                <>
+                  <Link to="/orders" className="hover:text-burgundy transition-colors font-medium whitespace-nowrap">
+                    My Orders
+                  </Link>
+                  <Link to="/favorites" className="hover:text-burgundy transition-colors font-medium whitespace-nowrap">
+                    My Favorites
+                  </Link>
+                </>
               )}
               <button onClick={handleLogout} className="hover:text-burgundy transition-colors font-medium">
                 Logout
@@ -270,9 +275,14 @@ function Navbar() {
             <>
               <span className="text-charcoal/60 text-sm">Hi, {user.name}</span>
               {!isAdmin && (
-                <Link to="/orders" onClick={closeMenu}>
-                  My Orders
-                </Link>
+                <>
+                  <Link to="/orders" onClick={closeMenu}>
+                    My Orders
+                  </Link>
+                  <Link to="/favorites" onClick={closeMenu}>
+                    My Favorites
+                  </Link>
+                </>
               )}
               <button onClick={handleLogout} className="text-left">
                 Logout

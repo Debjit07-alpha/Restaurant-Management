@@ -4,7 +4,8 @@ const {
   createOrder,
   getOrders,
   getOrderById,
-  updateOrderStatus
+  updateOrderStatus,
+  reorderOrder
 } = require("../controllers/orderController");
 
 const protect = require("../middleware/authMiddleware");
@@ -20,6 +21,10 @@ router.get("/", protect, getOrders);
 
 // Single order: owner or Admin only
 router.get("/:id", protect, getOrderById);
+
+// Reorder a past order: owner or Admin only.
+// Returns available items with CURRENT prices; unavailable skipped.
+router.post("/:id/reorder", protect, reorderOrder);
 
 // Update order status: Admin only
 router.put("/:id/status", protect, adminOnly, updateOrderStatus);

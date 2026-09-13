@@ -10,7 +10,7 @@ import MenuCard from "../components/MenuCard";
 function MenuItemDetails() {
   const { id } = useParams();
   const { addItem } = useCart();
-  const { isFavorite, toggleFavorite } = useFavorites();
+  const { isFavorite, toggleFavorite, pendingId } = useFavorites();
   const [item, setItem] = useState(null);
   const [related, setRelated] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -99,8 +99,9 @@ function MenuItemDetails() {
             )}
             <button
               onClick={() => toggleFavorite(item._id)}
+              disabled={pendingId === item._id}
               aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
-              className="absolute top-4 right-4 w-11 h-11 rounded-full bg-cream/95 shadow-md flex items-center justify-center hover:scale-105 transition-transform"
+              className="absolute top-4 right-4 w-11 h-11 rounded-full bg-cream/95 shadow-md flex items-center justify-center hover:scale-105 transition-transform disabled:opacity-50"
             >
               <svg
                 className={`w-5 h-5 ${favorite ? "text-burgundy" : "text-charcoal/40"}`}
