@@ -125,10 +125,29 @@ function OrderDetails() {
     fetchOrder();
   }, [id]);
 
+  // Normalized status: trims whitespace/case so "delivered",
+  // "Delivered " etc. still unlock reviews for delivered orders.
+  const normalizedStatus = String(order?.orderStatus || "").trim();
+  const isDelivered = normalizedStatus.toLowerCase() === "delivered";
+
+  // Order items may carry menuItem as a string id or a populated
+  // object ({ _id }). Normalize so lookup + modal always get a string.
+  const getOrderItemMenuId = (item) => {
+    if (!item?.menuItem) return null;
+    if (typeof item.menuItem === "object") return item.menuItem._id || null;
+    return item.menuItem;
+  };
+
+  const getReviewMenuId = (review) => {
+    if (!review?.menuItem) return null;
+    if (typeof review.menuItem === "object") return review.menuItem._id || null;
+    return review.menuItem;
+  };
+
   // Reviews the customer already wrote for this order (drives
   // Write review vs Edit review per item; delivered orders only).
   useEffect(() => {
-    if (!order || order.orderStatus !== "Delivered") {
+    if (!order || String(order.orderStatus || "").trim().toLowerCase() !== "delivered") {
       setMyReviews([]);
       return;
     }
@@ -147,10 +166,13 @@ function OrderDetails() {
     };
   }, [order]);
 
-  const isDelivered = order?.orderStatus === "Delivered";
-
-  const reviewFor = (menuItemId) =>
-    myReviews.find((r) => String(r.menuItem) === String(menuItemId));
+  const reviewFor = (menuItemId) => {
+    const target = String(menuItemId || "");
+    if (!target) return null;
+    return (
+      myReviews.find((r) => String(getReviewMenuId(r) || "") === target) || null
+    );
+  };
 
   const handleReviewSubmitted = (saved) => {
     setMyReviews((prev) => {
@@ -307,8 +329,9 @@ function OrderDetails() {
             )}
             <div className="mt-3 space-y-3">
               {order.items.map((item, index) => {
+                const menuItemId = getOrderItemMenuId(item);
                 const existingReview =
-                  isDelivered && item.menuItem ? reviewFor(item.menuItem) : null;
+                  isDelivered && menuItemId ? reviewFor(menuItemId) : null;
                 return (
                 <div key={index} className="flex items-center gap-3">
                   <div className="w-12 h-12 shrink-0 overflow-hidden rounded-xl bg-cream-dark">
@@ -337,7 +360,7 @@ function OrderDetails() {
                       <button
                         onClick={() =>
                           setReviewModal({
-                            menuItemId: item.menuItem,
+                            menuItemId: String(menuItemId),
                             initial: existingReview,
                           })
                         }
@@ -348,11 +371,11 @@ function OrderDetails() {
                       </button>
                     ) : (
                       isDelivered &&
-                      item.menuItem && (
+                      menuItemId && (
                         <button
                           onClick={() =>
                             setReviewModal({
-                              menuItemId: item.menuItem,
+                              menuItemId: String(menuItemId),
                               initial: null,
                             })
                           }

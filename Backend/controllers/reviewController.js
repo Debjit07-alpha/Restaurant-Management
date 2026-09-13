@@ -56,9 +56,13 @@ const verifyPurchase = async (userId, menuItemId, orderId) => {
     err.status = 403;
     throw err;
   }
-  const purchased = (order.items || []).some(
-    (item) => item.menuItem && item.menuItem.toString() === String(menuItemId)
-  );
+  const purchased = (order.items || []).some((item) => {
+    const id =
+      item.menuItem && typeof item.menuItem === "object"
+        ? item.menuItem._id
+        : item.menuItem;
+    return id && String(id) === String(menuItemId);
+  });
   if (!purchased) {
     const err = new Error("You did not order this item");
     err.status = 403;
