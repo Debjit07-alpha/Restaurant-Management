@@ -12,6 +12,8 @@ import {
 import { useReorder } from "../hooks/useReorder";
 import MenuImage from "../components/MenuImage";
 import CustomizationLines from "../components/CustomizationLines";
+import ReviewModal from "../components/ReviewModal";
+import { Stars } from "../components/ProductReviews";
 
 function formatDateTime(value) {
   if (!value) return "—";
@@ -103,6 +105,8 @@ function OrderDetails() {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [myReviews, setMyReviews] = useState([]);
+  const [reviewModal, setReviewModal] = useState(null);
   const { reorder, reorderingId, notice, clearNotice } = useReorder();
 
   useEffect(() => {
@@ -120,6 +124,42 @@ function OrderDetails() {
     };
     fetchOrder();
   }, [id]);
+
+  // Reviews the customer already wrote for this order (drives
+  // Write review vs Edit review per item; delivered orders only).
+  useEffect(() => {
+    if (!order || order.orderStatus !== "Delivered") {
+      setMyReviews([]);
+      return;
+    }
+    let cancelled = false;
+    const fetchMyReviews = async () => {
+      try {
+        const res = await api.get(`/reviews/my?orderId=${order._id}`);
+        if (!cancelled) setMyReviews(res.data.reviews || []);
+      } catch {
+        if (!cancelled) setMyReviews([]);
+      }
+    };
+    fetchMyReviews();
+    return () => {
+      cancelled = true;
+    };
+  }, [order]);
+
+  const isDelivered = order?.orderStatus === "Delivered";
+
+  const reviewFor = (menuItemId) =>
+    myReviews.find((r) => String(r.menuItem) === String(menuItemId));
+
+  const handleReviewSubmitted = (saved) => {
+    setMyReviews((prev) => {
+      const index = prev.findIndex((r) => r._id === saved._id);
+      if (index === -1) return [...prev, saved];
+      return prev.map((r) => (r._id === saved._id ? saved : r));
+    });
+    setReviewModal(null);
+  };
 
   if (loading) {
     return (
@@ -260,8 +300,16 @@ function OrderDetails() {
             <p className="text-charcoal/50 text-xs uppercase tracking-[0.2em]">
               Items
             </p>
+            {isDelivered && (
+              <p className="mt-1.5 text-[15px] font-display font-semibold">
+                Rate your order
+              </p>
+            )}
             <div className="mt-3 space-y-3">
-              {order.items.map((item, index) => (
+              {order.items.map((item, index) => {
+                const existingReview =
+                  isDelivered && item.menuItem ? reviewFor(item.menuItem) : null;
+                return (
                 <div key={index} className="flex items-center gap-3">
                   <div className="w-12 h-12 shrink-0 overflow-hidden rounded-xl bg-cream-dark">
                     {item.image ? (
@@ -285,12 +333,42 @@ function OrderDetails() {
                       customization={item.customization}
                       compact
                     />
+                    {existingReview ? (
+                      <button
+                        onClick={() =>
+                          setReviewModal({
+                            menuItemId: item.menuItem,
+                            initial: existingReview,
+                          })
+                        }
+                        className="mt-1.5 flex items-center gap-2 text-sm text-pine font-medium hover:underline underline-offset-2"
+                      >
+                        <Stars value={existingReview.rating} className="w-3.5 h-3.5" />
+                        Edit Review
+                      </button>
+                    ) : (
+                      isDelivered &&
+                      item.menuItem && (
+                        <button
+                          onClick={() =>
+                            setReviewModal({
+                              menuItemId: item.menuItem,
+                              initial: null,
+                            })
+                          }
+                          className="mt-1.5 text-sm text-burgundy font-medium hover:underline underline-offset-2"
+                        >
+                          Write a review
+                        </button>
+                      )
+                    )}
                   </div>
                   <p className="font-medium whitespace-nowrap">
                     {formatPrice(item.subtotal)}
                   </p>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -340,6 +418,15 @@ function OrderDetails() {
           </div>
         </section>
       </div>
+      {reviewModal && (
+        <ReviewModal
+          menuItemId={reviewModal.menuItemId}
+          orderId={order._id}
+          initial={reviewModal.initial}
+          onClose={() => setReviewModal(null)}
+          onSubmitted={handleReviewSubmitted}
+        />
+      )}
     </div>
   );
 }

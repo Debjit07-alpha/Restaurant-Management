@@ -41,6 +41,21 @@ const menuItemSchema = new mongoose.Schema(
       default: ""
     },
 
+    // Denormalized review summary (recomputed on every review
+    // create/update/delete so cards never run per-item aggregations).
+    ratingAverage: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5
+    },
+
+    ratingCount: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+
     // Optional per-item customization (absent/empty = one-click Add to Cart).
     // Example: [{ name: "Spice Level", type: "single", required: true,
     //   options: [{ name: "Mild", price: 0 }] }]

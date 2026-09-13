@@ -23,6 +23,7 @@ import AddMenuItem from "./pages/admin/AddMenuItem";
 import EditMenuItem from "./pages/admin/EditMenuItem";
 import Users from "./pages/admin/Users";
 import Orders from "./pages/admin/Orders";
+import Reviews from "./pages/admin/Reviews";
 
 function App() {
   return (
@@ -197,6 +198,16 @@ function App() {
             <ProtectedRoute>
               <AdminLayout>
                 <Orders />
+              </AdminLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/reviews"
+          element={
+            <ProtectedRoute>
+              <AdminLayout>
+                <Reviews />
               </AdminLayout>
             </ProtectedRoute>
           }

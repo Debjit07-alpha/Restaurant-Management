@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { formatPrice } from "../utils/formatPrice";
 import { useCart } from "../context/CartContext";
 import { useFavorites } from "../hooks/useFavorites";
+import { formatRating } from "./ProductReviews";
 import MenuImage from "./MenuImage";
 
 function MenuCard({ item }) {
@@ -63,12 +64,14 @@ function MenuCard({ item }) {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 20.5C7 16.5 3.5 13.3 3.5 9.5A4.5 4.5 0 018 5c1.6 0 3.1.8 4 2.1A4.5 4.5 0 0116 5a4.5 4.5 0 014.5 4.5c0 3.8-3.5 7-8.5 11z" />
           </svg>
         </button>
-        <span className="absolute bottom-3 left-3 flex items-center gap-1 rounded-full bg-cream/95 px-2.5 py-1 text-xs font-bold shadow-sm">
-          <svg className="w-3.5 h-3.5 text-brand" viewBox="0 0 20 20" fill="currentColor">
-            <path d="M10 1.5l2.6 5.3 5.9.9-4.2 4.1 1 5.8L10 14.9l-5.3 2.7 1-5.8L1.5 7.7l5.9-.9L10 1.5z" />
-          </svg>
-          4.8
-        </span>
+        {formatRating(item.ratingAverage) && (item.ratingCount || 0) > 0 && (
+          <span className="absolute bottom-3 left-3 flex items-center gap-1 rounded-full bg-cream/95 px-2.5 py-1 text-xs font-bold shadow-sm">
+            <svg className="w-3.5 h-3.5 text-brand" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M10 1.5l2.6 5.3 5.9.9-4.2 4.1 1 5.8L10 14.9l-5.3 2.7 1-5.8L1.5 7.7l5.9-.9L10 1.5z" />
+            </svg>
+            {formatRating(item.ratingAverage)} ({item.ratingCount})
+          </span>
+        )}
         {outOfStock && (
           <span className="absolute bottom-3 right-3 rounded-full bg-charcoal/85 px-3 py-1 text-xs font-medium text-cream">
             Out of Stock

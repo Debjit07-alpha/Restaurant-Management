@@ -4,8 +4,10 @@ import api from "../api/axios";
 import { formatPrice } from "../utils/formatPrice";
 import { useCart } from "../context/CartContext";
 import { useFavorites } from "../hooks/useFavorites";
+import { formatRating } from "../components/ProductReviews";
 import MenuImage from "../components/MenuImage";
 import MenuCard from "../components/MenuCard";
+import ProductReviews from "../components/ProductReviews";
 
 function MenuItemDetails() {
   const { id } = useParams();
@@ -121,8 +123,16 @@ function MenuItemDetails() {
               <svg className="w-4 h-4 text-brand" viewBox="0 0 20 20" fill="currentColor">
                 <path d="M10 1.5l2.6 5.3 5.9.9-4.2 4.1 1 5.8L10 14.9l-5.3 2.7 1-5.8L1.5 7.7l5.9-.9L10 1.5z" />
               </svg>
-              <span className="font-semibold">4.8</span>
-              <span className="text-charcoal/50">· Customer favorite</span>
+              {formatRating(item.ratingAverage) && (item.ratingCount || 0) > 0 ? (
+                <>
+                  <span className="font-semibold">
+                    {formatRating(item.ratingAverage)} ({item.ratingCount} review{item.ratingCount === 1 ? "" : "s"})
+                  </span>
+                  <span className="text-charcoal/50">· Customer favorite</span>
+                </>
+              ) : (
+                <span className="text-charcoal/50">No reviews yet · Customer favorite</span>
+              )}
             </div>
             <h1 className="font-display font-semibold text-4xl sm:text-5xl mt-3">
               {item.name}
@@ -173,6 +183,11 @@ function MenuItemDetails() {
               Add to Cart · {formatPrice(item.price * quantity)}
             </button>
           </div>
+        </div>
+
+        {/* Reviews */}
+        <div className="mt-20">
+          <ProductReviews menuItemId={item._id} />
         </div>
 
         {/* Related */}
