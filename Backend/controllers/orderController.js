@@ -20,10 +20,13 @@ const {
 } = require("../utils/rewardService");
 
 const PAYMENT_METHODS = ["Cash on Delivery", "UPI on Delivery"];
+const DINE_IN_PAYMENT_METHODS = ["Cash at Counter", "UPI at Table"];
 const ORDER_STATUSES = [
   "Pending",
   "Confirmed",
   "Preparing",
+  "Ready",
+  "Served",
   "Delivered",
   "Cancelled"
 ];
@@ -47,9 +50,24 @@ const createOrder = async (req, res) => {
   let rewardPointsUsed = 0;
   let rewardsDeducted = false;
   try {
-    const { customerName, mobile, address, paymentMethod, items } = req.body;
+    const {
+      customerName,
+      mobile,
+      address,
+      paymentMethod,
+      items,
+      orderType: requestedType,
+      tableNumber,
+      qrToken,
+      guestCount
+    } = req.body;
 
-    // Validate contact + address
+    // Two modes, one pipeline: delivery (default, unchanged) and dine-in
+    // (table-verified, no address, no delivery fee).
+    const orderType = requestedType === "dine_in" ? "dine_in" : "delivery";
+    const isDineIn = orderType === "dine_in";
+
+    // Validate contact (both modes need a reachable customer)
     if (!customerName || !mobile) {
       return res.status(400).json({
         success: false,
@@ -64,25 +82,54 @@ const createOrder = async (req, res) => {
       });
     }
 
-    if (
-      !address ||
-      !address.flat ||
-      !address.street ||
-      !address.city ||
-      !address.state ||
-      !address.pincode
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Flat, street, city, state and pincode are required"
-      });
-    }
+    let dineInTable = null;
+    let dineInSession = null;
+    let guests = null;
+    if (isDineIn) {
+      // QR token + table verified server-side; never trusted from input.
+      const {
+        verifyTableAccess,
+        getOrCreateActiveSession
+      } = require("../utils/dineInService");
+      try {
+        dineInTable = await verifyTableAccess({ tableNumber, qrToken });
+      } catch (tableError) {
+        return res.status(tableError.status || 400).json({
+          success: false,
+          message: tableError.message
+        });
+      }
+      if (guestCount !== undefined && guestCount !== null && guestCount !== "") {
+        guests = Number(guestCount);
+        if (!Number.isInteger(guests) || guests < 1 || guests > 50) {
+          return res.status(400).json({
+            success: false,
+            message: "Guest count must be 1–50"
+          });
+        }
+      }
+      dineInSession = await getOrCreateActiveSession(dineInTable);
+    } else {
+      if (
+        !address ||
+        !address.flat ||
+        !address.street ||
+        !address.city ||
+        !address.state ||
+        !address.pincode
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Flat, street, city, state and pincode are required"
+        });
+      }
 
-    if (!/^\d{6}$/.test(String(address.pincode).trim())) {
-      return res.status(400).json({
-        success: false,
-        message: "Enter a valid 6-digit pincode"
-      });
+      if (!/^\d{6}$/.test(String(address.pincode).trim())) {
+        return res.status(400).json({
+          success: false,
+          message: "Enter a valid 6-digit pincode"
+        });
+      }
     }
 
     if (!Array.isArray(items) || items.length === 0) {
@@ -92,8 +139,9 @@ const createOrder = async (req, res) => {
       });
     }
 
-    const method = paymentMethod || "Cash on Delivery";
-    if (!PAYMENT_METHODS.includes(method)) {
+    const allowedMethods = isDineIn ? DINE_IN_PAYMENT_METHODS : PAYMENT_METHODS;
+    const method = paymentMethod || (isDineIn ? "Cash at Counter" : "Cash on Delivery");
+    if (!allowedMethods.includes(method)) {
       return res.status(400).json({
         success: false,
         message: "Invalid payment method"
@@ -194,28 +242,32 @@ const createOrder = async (req, res) => {
     // Delivery is quoted from DB settings + the final checkout pincode
     // (zone match, free threshold on the payable amount, minimum order).
     // Frontend fees/totals are never trusted; history is snapshotted.
-    const quote = await quoteDelivery({
-      pincode: address.pincode,
-      subtotal,
-      discountAmount
-    });
-    if (!quote.deliverable) {
-      return res.status(400).json({
-        success: false,
-        message:
-          quote.reason ||
-          "Delivery is currently unavailable to this location."
+    // Dine-in has no delivery: fee is always 0, no zone/minimum checks.
+    let deliveryCharge = 0;
+    if (!isDineIn) {
+      const quote = await quoteDelivery({
+        pincode: address.pincode,
+        subtotal,
+        discountAmount
       });
+      if (!quote.deliverable) {
+        return res.status(400).json({
+          success: false,
+          message:
+            quote.reason ||
+            "Delivery is currently unavailable to this location."
+        });
+      }
+      try {
+        assertMinimumOrder(quote, subtotal);
+      } catch (minimumError) {
+        return res.status(minimumError.status || 400).json({
+          success: false,
+          message: minimumError.message
+        });
+      }
+      deliveryCharge = quote.deliveryCharge;
     }
-    try {
-      assertMinimumOrder(quote, subtotal);
-    } catch (minimumError) {
-      return res.status(minimumError.status || 400).json({
-        success: false,
-        message: minimumError.message
-      });
-    }
-    const deliveryCharge = quote.deliveryCharge;
 
     // Optional loyalty redemption, validated against the live balance.
     // Deducted atomically BEFORE the order is stored; refunded with an
@@ -281,17 +333,24 @@ const createOrder = async (req, res) => {
       user: req.user.userId,
       customerName: String(customerName).trim(),
       mobile: String(mobile).trim(),
-      address: {
-        flat: String(address.flat).trim(),
-        street: String(address.street).trim(),
-        landmark: address.landmark ? String(address.landmark).trim() : "",
-        city: String(address.city).trim(),
-        state: String(address.state).trim(),
-        pincode: String(address.pincode).trim(),
-        instructions: address.instructions
-          ? String(address.instructions).trim()
-          : ""
-      },
+      orderType,
+      table: isDineIn ? dineInTable._id : null,
+      tableNumber: isDineIn ? dineInTable.tableNumber : "",
+      dineInSessionId: isDineIn ? dineInSession.sessionId : "",
+      guestCount: isDineIn ? guests : null,
+      address: isDineIn
+        ? undefined
+        : {
+            flat: String(address.flat).trim(),
+            street: String(address.street).trim(),
+            landmark: address.landmark ? String(address.landmark).trim() : "",
+            city: String(address.city).trim(),
+            state: String(address.state).trim(),
+            pincode: String(address.pincode).trim(),
+            instructions: address.instructions
+              ? String(address.instructions).trim()
+              : ""
+          },
       items: orderItems,
       subtotal,
       couponCode,
@@ -328,6 +387,13 @@ const createOrder = async (req, res) => {
         points: -rewardPointsUsed,
         description: `Redeemed on order #${order.orderId}`
       });
+    }
+
+    // A valid dine-in order occupies its table (session stays active for
+    // follow-up orders until explicitly closed).
+    if (isDineIn && dineInTable) {
+      const Table = require("../models/Table");
+      await Table.findByIdAndUpdate(dineInTable._id, { status: "occupied" });
     }
 
     res.status(201).json({
@@ -465,9 +531,10 @@ const updateOrderStatus = async (req, res) => {
         );
       }
 
-      // Loyalty earn: only on the transition INTO Delivered, exactly
-      // once per order (atomic claim on rewardsCredited).
-      if (orderStatus === "Delivered") {
+      // Loyalty earn: only on the transition INTO a completed state
+      // (Delivered, or Served for dine-in), exactly once per order
+      // (atomic claim on rewardsCredited).
+      if (orderStatus === "Delivered" || orderStatus === "Served") {
         try {
           const claimed = await Order.findOneAndUpdate(
             { _id: order._id, rewardsCredited: { $ne: true } },

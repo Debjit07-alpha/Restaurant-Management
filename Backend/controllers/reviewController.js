@@ -32,8 +32,9 @@ const uploadBufferToCloudinary = (file) => {
   });
 };
 
-// Eligibility: the order must exist, belong to the user, be Delivered,
-// and actually contain the menu item. Never trusts frontend ownership.
+// Eligibility: the order must exist, belong to the user, be completed
+// (Delivered, or Served for dine-in), and actually contain the menu
+// item. Never trusts frontend ownership.
 const verifyPurchase = async (userId, menuItemId, orderId) => {
   if (!mongoose.isValidObjectId(orderId)) {
     const err = new Error("Order not found");
@@ -51,7 +52,7 @@ const verifyPurchase = async (userId, menuItemId, orderId) => {
     err.status = 403;
     throw err;
   }
-  if (order.orderStatus !== "Delivered") {
+  if (order.orderStatus !== "Delivered" && order.orderStatus !== "Served") {
     const err = new Error("You can review items once the order is delivered");
     err.status = 403;
     throw err;

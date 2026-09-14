@@ -19,7 +19,15 @@ import Register from "./pages/Register";
 import Login from "./pages/Login";
 import AdminLogin from "./pages/AdminLogin";
 
+import DineIn from "./pages/DineIn";
+import DineInCart from "./pages/DineInCart";
+import DineInCheckout from "./pages/DineInCheckout";
+import BookTable from "./pages/BookTable";
+import MyReservations from "./pages/MyReservations";
+import { DineInCartProvider } from "./context/DineInCartContext";
 import Dashboard from "./pages/admin/Dashboard";
+import Tables from "./pages/admin/Tables";
+import Reservations from "./pages/admin/Reservations";
 import MenuItems from "./pages/admin/MenuItems";
 import AddMenuItem from "./pages/admin/AddMenuItem";
 import EditMenuItem from "./pages/admin/EditMenuItem";
@@ -159,6 +167,62 @@ function App() {
           }
         />
         <Route
+          path="/dine-in/:tableNumber"
+          element={
+            <DineInCartProvider>
+              <DineIn />
+            </DineInCartProvider>
+          }
+        />
+        <Route
+          path="/dine-in/cart"
+          element={
+            <UserRoute>
+              <DineInCartProvider>
+                <>
+                  <Navbar />
+                  <DineInCart />
+                </>
+              </DineInCartProvider>
+            </UserRoute>
+          }
+        />
+        <Route
+          path="/dine-in/checkout"
+          element={
+            <UserRoute>
+              <DineInCartProvider>
+                <>
+                  <Navbar />
+                  <DineInCheckout />
+                </>
+              </DineInCartProvider>
+            </UserRoute>
+          }
+        />
+        <Route
+          path="/book-table"
+          element={
+            <UserRoute>
+              <>
+                <Navbar />
+                <BookTable />
+              </>
+            </UserRoute>
+          }
+        />
+        <Route
+          path="/reservations"
+          element={
+            <UserRoute>
+              <>
+                <Navbar />
+                <MyReservations />
+              </>
+            </UserRoute>
+          }
+        />
+        <Route
           path="/admin/login"
           element={
             <>
@@ -255,6 +319,26 @@ function App() {
             <ProtectedRoute>
               <AdminLayout>
                 <RewardsAdmin />
+              </AdminLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/tables"
+          element={
+            <ProtectedRoute>
+              <AdminLayout>
+                <Tables />
+              </AdminLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/reservations"
+          element={
+            <ProtectedRoute>
+              <AdminLayout>
+                <Reservations />
               </AdminLayout>
             </ProtectedRoute>
           }

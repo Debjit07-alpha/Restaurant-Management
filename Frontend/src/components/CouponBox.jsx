@@ -4,6 +4,7 @@ import { formatPrice } from "../utils/formatPrice";
 import { toOrderCustomization } from "../utils/customization";
 
 export const COUPON_STORAGE_KEY = "tastybites_coupon";
+export const DINE_IN_COUPON_STORAGE_KEY = "tastybites_dinein_coupon";
 
 // Convert cart entries (incl. customization) into the backend coupon
 // payload. Uses live cart lines so add-ons count toward the subtotal.
@@ -22,18 +23,18 @@ export function toCouponItems(entries) {
   }));
 }
 
-export function loadStoredCouponCode() {
+export function loadStoredCouponCode(storageKey = COUPON_STORAGE_KEY) {
   try {
-    return String(localStorage.getItem(COUPON_STORAGE_KEY) || "").trim().toUpperCase();
+    return String(localStorage.getItem(storageKey) || "").trim().toUpperCase();
   } catch {
     return "";
   }
 }
 
-export function storeCouponCode(code) {
+export function storeCouponCode(code, storageKey = COUPON_STORAGE_KEY) {
   try {
-    if (code) localStorage.setItem(COUPON_STORAGE_KEY, code);
-    else localStorage.removeItem(COUPON_STORAGE_KEY);
+    if (code) localStorage.setItem(storageKey, code);
+    else localStorage.removeItem(storageKey);
   } catch {
     // Storage unavailable: coupon simply won't persist across pages.
   }
@@ -42,9 +43,10 @@ export function storeCouponCode(code) {
 // Promo-code box. All amounts come from the backend (/coupons/validate);
 // the frontend only displays the backend result.
 // Props: cartItems (live cart), onCoupon(result|null), pincode (optional,
-// used for zone-aware delivery fee inside the validation response).
-function CouponBox({ cartItems, onCoupon, pincode }) {
-  const [code, setCode] = useState(loadStoredCouponCode);
+// used for zone-aware delivery fee inside the validation response),
+// storageKey (optional persistence key, so dine-in has its own slot).
+function CouponBox({ cartItems, onCoupon, pincode, storageKey = COUPON_STORAGE_KEY }) {
+  const [code, setCode] = useState(() => loadStoredCouponCode(storageKey));
   const [applied, setApplied] = useState(null);
   const [error, setError] = useState("");
   const [applying, setApplying] = useState(false);
@@ -96,7 +98,7 @@ function CouponBox({ cartItems, onCoupon, pincode }) {
         };
         setApplied(result);
         setCode(normalized);
-        storeCouponCode(normalized);
+        storeCouponCode(normalized, storageKey);
         onCouponRef.current?.(result);
         return result;
       } catch (err) {
@@ -113,13 +115,13 @@ function CouponBox({ cartItems, onCoupon, pincode }) {
         if (!silent) setApplying(false);
       }
     },
-    [cartItems, pincode]
+    [cartItems, pincode, storageKey]
   );
 
   const handleRemove = () => {
     setApplied(null);
     setError("");
-    storeCouponCode("");
+    storeCouponCode("", storageKey);
     onCouponRef.current?.(null);
   };
 
@@ -131,7 +133,7 @@ function CouponBox({ cartItems, onCoupon, pincode }) {
     if (!current) return;
     if (!cartItems || cartItems.length === 0) {
       setApplied(null);
-      storeCouponCode("");
+      storeCouponCode("", storageKey);
       onCouponRef.current?.(null);
       return;
     }
@@ -163,7 +165,7 @@ function CouponBox({ cartItems, onCoupon, pincode }) {
       } catch (err) {
         if (cancelled) return;
         setApplied(null);
-        storeCouponCode("");
+        storeCouponCode("", storageKey);
         onCouponRef.current?.(null);
         setError(
           err.response?.data?.message ||

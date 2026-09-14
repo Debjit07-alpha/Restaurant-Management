@@ -241,6 +241,12 @@ function Navbar() {
                   <Link to="/rewards" className="hover:text-burgundy transition-colors font-medium whitespace-nowrap">
                     Rewards
                   </Link>
+                  <Link to="/book-table" className="hover:text-burgundy transition-colors font-medium whitespace-nowrap">
+                    Book a Table
+                  </Link>
+                  <Link to="/reservations" className="hover:text-burgundy transition-colors font-medium whitespace-nowrap">
+                    My Reservations
+                  </Link>
                 </>
               )}
               <button onClick={handleLogout} className="hover:text-burgundy transition-colors font-medium">
@@ -332,6 +338,12 @@ function Navbar() {
                   </Link>
                   <Link to="/rewards" onClick={closeMenu}>
                     Rewards
+                  </Link>
+                  <Link to="/book-table" onClick={closeMenu}>
+                    Book a Table
+                  </Link>
+                  <Link to="/reservations" onClick={closeMenu}>
+                    My Reservations
                   </Link>
                   <Link to="/notifications" onClick={closeMenu}>
                     Notifications

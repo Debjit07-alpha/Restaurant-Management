@@ -3,11 +3,11 @@ import { Link, useParams } from "react-router-dom";
 import api from "../api/axios";
 import { formatPrice } from "../utils/formatPrice";
 import {
-  ORDER_STEPS,
   ORDER_STEP_LABELS,
   getStepIndex,
   isCancelled,
   statusBadgeClass,
+  stepsFor,
 } from "../utils/orderStatus";
 import { useReorder } from "../hooks/useReorder";
 import MenuImage from "../components/MenuImage";
@@ -33,7 +33,7 @@ function formatAddress(address) {
     .join(", ");
 }
 
-function StatusTimeline({ status }) {
+function StatusTimeline({ status, orderType }) {
   if (isCancelled(status)) {
     return (
       <div
@@ -51,10 +51,11 @@ function StatusTimeline({ status }) {
     );
   }
 
-  const current = getStepIndex(status);
+  const steps = stepsFor(orderType);
+  const current = getStepIndex(status, orderType);
   return (
     <ol aria-label="Order status timeline" className="space-y-0">
-      {ORDER_STEPS.map((step, idx) => {
+      {steps.map((step, idx) => {
         const done = idx < current;
         const active = idx === current;
         return (
@@ -72,7 +73,7 @@ function StatusTimeline({ status }) {
               >
                 {done ? "✓" : active ? "●" : "○"}
               </span>
-              {idx < ORDER_STEPS.length - 1 && (
+              {idx < steps.length - 1 && (
                 <span
                   aria-hidden
                   className={`w-0.5 flex-1 min-h-[28px] ${
@@ -126,9 +127,13 @@ function OrderDetails() {
   }, [id]);
 
   // Normalized status: trims whitespace/case so "delivered",
-  // "Delivered " etc. still unlock reviews for delivered orders.
+  // "Delivered " etc. still unlock reviews for completed orders.
+  // Dine-in orders complete at "Served" instead of "Delivered".
   const normalizedStatus = String(order?.orderStatus || "").trim();
-  const isDelivered = normalizedStatus.toLowerCase() === "delivered";
+  const isDelivered =
+    normalizedStatus.toLowerCase() === "delivered" ||
+    normalizedStatus.toLowerCase() === "served";
+  const isDineIn = order?.orderType === "dine_in";
 
   // Order items may carry menuItem as a string id or a populated
   // object ({ _id }). Normalize so lookup + modal always get a string.
@@ -145,9 +150,13 @@ function OrderDetails() {
   };
 
   // Reviews the customer already wrote for this order (drives
-  // Write review vs Edit review per item; delivered orders only).
+  // Write review vs Edit review per item; completed orders only —
+  // Delivered, or Served for dine-in).
   useEffect(() => {
-    if (!order || String(order.orderStatus || "").trim().toLowerCase() !== "delivered") {
+    const completed = ["delivered", "served"].includes(
+      String(order?.orderStatus || "").trim().toLowerCase()
+    );
+    if (!order || !completed) {
       setMyReviews([]);
       return;
     }
@@ -278,7 +287,7 @@ function OrderDetails() {
         >
           <h2 className="font-display font-semibold text-2xl">Track your order</h2>
           <div className="mt-5">
-            <StatusTimeline status={order.orderStatus} />
+            <StatusTimeline status={order.orderStatus} orderType={order.orderType} />
           </div>
         </section>
 
@@ -297,26 +306,49 @@ function OrderDetails() {
                 Payment
               </p>
               <p className="font-semibold mt-1">{order.paymentMethod}</p>
-              <p className="text-charcoal/70 mt-0.5">Pay on delivery</p>
+              <p className="text-charcoal/70 mt-0.5">
+                {isDineIn ? `Dine-in${order.tableNumber ? ` · Table ${order.tableNumber}` : ""}` : "Pay on delivery"}
+              </p>
             </div>
           </div>
 
-          <div className="mt-5 text-sm">
-            <p className="text-charcoal/50 text-xs uppercase tracking-[0.2em]">
-              Delivery address
-            </p>
-            <p className="mt-1 leading-relaxed">
-              {formatAddress(order.address)}
-              <br />
-              {order.address.city}, {order.address.state}{" "}
-              {order.address.pincode}
-              {order.address.instructions && (
-                <span className="block text-charcoal/60 mt-1">
-                  Note: {order.address.instructions}
+          {isDineIn ? (
+            <div className="mt-5 text-sm">
+              <p className="text-charcoal/50 text-xs uppercase tracking-[0.2em]">
+                Table
+              </p>
+              <p className="mt-1 leading-relaxed">
+                <span className="font-semibold">
+                  {order.tableNumber ? `Table ${order.tableNumber}` : "Dine-in"}
                 </span>
-              )}
-            </p>
-          </div>
+                {order.guestCount ? (
+                  <span className="text-charcoal/60"> · {order.guestCount} guest{order.guestCount === 1 ? "" : "s"}</span>
+                ) : null}
+                {order.dineInSessionId && (
+                  <span className="block text-charcoal/60 mt-1">
+                    Session: {order.dineInSessionId}
+                  </span>
+                )}
+              </p>
+            </div>
+          ) : (
+            <div className="mt-5 text-sm">
+              <p className="text-charcoal/50 text-xs uppercase tracking-[0.2em]">
+                Delivery address
+              </p>
+              <p className="mt-1 leading-relaxed">
+                {formatAddress(order.address)}
+                <br />
+                {order.address.city}, {order.address.state}{" "}
+                {order.address.pincode}
+                {order.address.instructions && (
+                  <span className="block text-charcoal/60 mt-1">
+                    Note: {order.address.instructions}
+                  </span>
+                )}
+              </p>
+            </div>
+          )}
 
           <div className="pt-5 mt-5 border-t border-charcoal/10">
             <p className="text-charcoal/50 text-xs uppercase tracking-[0.2em]">

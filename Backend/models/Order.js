@@ -92,13 +92,50 @@ const orderSchema = new mongoose.Schema(
       trim: true
     },
 
+    // Delivery mode (default) vs dine-in mode. Dine-in orders carry a
+    // table reference instead of a delivery address.
+    orderType: {
+      type: String,
+      enum: ["delivery", "dine_in"],
+      default: "delivery"
+    },
+
+    table: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Table",
+      default: null
+    },
+
+    tableNumber: {
+      type: String,
+      default: "",
+      trim: true,
+      uppercase: true
+    },
+
+    // Groups the (possibly multiple) orders of one table visit.
+    dineInSessionId: {
+      type: String,
+      default: "",
+      trim: true
+    },
+
+    guestCount: {
+      type: Number,
+      default: null,
+      min: 1,
+      max: 50
+    },
+
+    // Required for delivery; omitted for dine-in (the controller
+    // enforces address rules per order type instead).
     address: {
-      flat: { type: String, required: true, trim: true },
-      street: { type: String, required: true, trim: true },
+      flat: { type: String, default: "", trim: true },
+      street: { type: String, default: "", trim: true },
       landmark: { type: String, default: "", trim: true },
-      city: { type: String, required: true, trim: true },
-      state: { type: String, required: true, trim: true },
-      pincode: { type: String, required: true, trim: true },
+      city: { type: String, default: "", trim: true },
+      state: { type: String, default: "", trim: true },
+      pincode: { type: String, default: "", trim: true },
       instructions: { type: String, default: "", trim: true }
     },
 
@@ -177,13 +214,16 @@ const orderSchema = new mongoose.Schema(
     paymentMethod: {
       type: String,
       required: true,
-      enum: ["Cash on Delivery", "UPI on Delivery"],
+      enum: ["Cash on Delivery", "UPI on Delivery", "Cash at Counter", "UPI at Table"],
       default: "Cash on Delivery"
     },
 
+    // Shared flow with dine-in legs: delivery runs
+    // Pending -> Confirmed -> Preparing -> Delivered, dine-in runs
+    // Pending -> Confirmed -> Preparing -> Ready -> Served.
     orderStatus: {
       type: String,
-      enum: ["Pending", "Confirmed", "Preparing", "Delivered", "Cancelled"],
+      enum: ["Pending", "Confirmed", "Preparing", "Ready", "Served", "Delivered", "Cancelled"],
       default: "Pending"
     }
   },

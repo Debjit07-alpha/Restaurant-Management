@@ -6,8 +6,11 @@ import { formatRating } from "./ProductReviews";
 import { isHidden, isOrderable } from "../utils/availability";
 import MenuImage from "./MenuImage";
 
-function MenuCard({ item }) {
-  const { cartItems, addItem, increaseQty, decreaseQty, removeItem } = useCart();
+function MenuCard({ item, cart }) {
+  const defaultCart = useCart();
+  // Optional cart override (e.g. the dine-in cart) with the same shape.
+  const { cartItems, addItem, increaseQty, decreaseQty, removeItem } =
+    cart || defaultCart;
   const { isFavorite, toggleFavorite, pendingId } = useFavorites();
   // Hidden items never render on customer surfaces.
   if (isHidden(item)) return null;

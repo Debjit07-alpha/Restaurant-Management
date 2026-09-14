@@ -17,6 +17,8 @@ const locationRoutes = require("./routes/locationRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const deliveryRoutes = require("./routes/deliveryRoutes");
 const rewardRoutes = require("./routes/rewardRoutes");
+const tableRoutes = require("./routes/tableRoutes");
+const reservationRoutes = require("./routes/reservationRoutes");
 
 const app = express();
 

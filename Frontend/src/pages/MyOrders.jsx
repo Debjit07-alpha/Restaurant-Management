@@ -151,6 +151,11 @@ function MyOrders() {
                     <div className="min-w-0">
                       <p className="font-display font-semibold text-xl sm:text-2xl truncate">
                         Order #{order.orderId}
+                        {order.orderType === "dine_in" && (
+                          <span className="ml-2 align-middle text-xs font-sans font-semibold bg-pine/10 text-pine border border-pine/20 rounded-full px-2.5 py-0.5 whitespace-nowrap">
+                            Dine-In{order.tableNumber ? ` · ${order.tableNumber}` : ""}
+                          </span>
+                        )}
                       </p>
                       <p className="text-sm text-charcoal/60 mt-1">
                         {formatOrderDate(order.createdAt)} · {itemCount} item

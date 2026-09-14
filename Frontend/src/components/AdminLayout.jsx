@@ -73,6 +73,8 @@ function AdminLayout({ children }) {
     { to: "/admin/menu-items", label: "Menu Items", icon: icons.menu },
     { to: "/admin/users", label: "Users", icon: icons.users },
     { to: "/admin/orders", label: "Orders", icon: icons.orders },
+    { to: "/admin/tables", label: "Tables", icon: icons.orders },
+    { to: "/admin/reservations", label: "Reservations", icon: icons.users },
     { to: "/admin/reviews", label: "Reviews", icon: icons.reviews },
     { to: "/admin/coupons", label: "Coupons", icon: icons.coupons },
     { to: "/admin/rewards", label: "Rewards", icon: icons.rewards },

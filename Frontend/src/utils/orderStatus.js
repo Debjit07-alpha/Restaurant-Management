@@ -1,20 +1,28 @@
-// Shared order-status helpers. Reuses the backend's existing
-// status names (Pending, Confirmed, Preparing, Delivered, Cancelled)
-// so no duplicate state system is introduced.
+// Shared order-status helpers. Delivery runs Pending -> Confirmed ->
+// Preparing -> Delivered; dine-in runs Pending -> Confirmed ->
+// Preparing -> Ready -> Served. One system, two step tracks.
 
 export const ORDER_STEPS = ["Pending", "Confirmed", "Preparing", "Delivered"];
+
+export const DINE_IN_STEPS = ["Pending", "Confirmed", "Preparing", "Ready", "Served"];
 
 export const ORDER_STEP_LABELS = {
   Pending: "Order Placed",
   Confirmed: "Confirmed",
   Preparing: "Preparing",
+  Ready: "Ready",
+  Served: "Served",
   Delivered: "Delivered",
   Cancelled: "Cancelled",
 };
 
-export function getStepIndex(status) {
+export function stepsFor(orderType) {
+  return orderType === "dine_in" ? DINE_IN_STEPS : ORDER_STEPS;
+}
+
+export function getStepIndex(status, orderType) {
   if (status === "Cancelled") return -1;
-  const idx = ORDER_STEPS.indexOf(status);
+  const idx = stepsFor(orderType).indexOf(status);
   return idx === -1 ? 0 : idx;
 }
 
@@ -30,6 +38,10 @@ export function statusBadgeClass(status) {
       return "bg-sky-100 text-sky-800 border-sky-200";
     case "Preparing":
       return "bg-orange-100 text-orange-800 border-orange-200";
+    case "Ready":
+      return "bg-emerald-100 text-emerald-800 border-emerald-200";
+    case "Served":
+      return "bg-teal-100 text-teal-800 border-teal-200";
     case "Delivered":
       return "bg-pine/10 text-pine border-pine/20";
     case "Cancelled":
