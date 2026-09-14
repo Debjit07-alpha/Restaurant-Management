@@ -52,6 +52,8 @@ app.use("/api/location", locationRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/delivery", deliveryRoutes);
 app.use("/api/rewards", rewardRoutes);
+app.use("/api/tables", tableRoutes);
+app.use("/api/reservations", reservationRoutes);
 
 // Test route
 app.get("/", (req, res) => {
