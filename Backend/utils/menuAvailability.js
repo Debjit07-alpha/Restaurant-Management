@@ -22,7 +22,8 @@ const isOrderable = (menuItem) => resolveStatus(menuItem) === "available";
 
 const parseStatus = (value) => {
   if (typeof value !== "string") return null;
-  const normalized = value.trim().toLowerCase();
+  // Accepts canonical values ("sold_out") and UI labels ("Sold Out").
+  const normalized = value.trim().toLowerCase().replace(/\s+/g, "_");
   return STATUSES.includes(normalized) ? normalized : null;
 };
 

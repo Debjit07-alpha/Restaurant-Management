@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const MenuItem = require("../models/MenuItem");
 const { cloudinary, isCloudinaryConfigured } = require("../config/cloudinary");
 const {
@@ -420,6 +421,8 @@ const updateMenuItem = async (req, res) => {
 // =============================
 const updateAvailability = async (req, res) => {
   try {
+    // Canonical machine values only (frontend already sends these);
+    // UI labels like "Sold Out" are normalized, anything else is 400.
     const status = parseStatus(req.body.availabilityStatus);
     if (status === null) {
       return res.status(400).json({
@@ -427,23 +430,43 @@ const updateAvailability = async (req, res) => {
         message: "Invalid availability status"
       });
     }
-    const menuItem = await MenuItem.findById(req.params.id);
+    // Malformed ids must be 400, never a CastError 500.
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid menu item id"
+      });
+    }
+    // Targeted update: validates only the touched paths, so legacy
+    // quirks elsewhere in an old document can never fail this toggle.
+    // Never creates a document (upsert stays off).
+    const menuItem = await MenuItem.findByIdAndUpdate(
+      req.params.id,
+      {
+        availabilityStatus: status,
+        availability: status === "available"
+      },
+      { new: true, runValidators: true }
+    );
     if (!menuItem) {
       return res.status(404).json({
         success: false,
         message: "Menu item not found"
       });
     }
-    menuItem.availabilityStatus = status;
-    menuItem.availability = status === "available";
-    await menuItem.save();
     res.status(200).json({
       success: true,
       message: "Availability updated successfully",
       menuItem
     });
   } catch (error) {
-    console.error("Update availability error:", error.message);
+    // Normalized input already passed, so anything here is unexpected:
+    // log the real error internally, return a clean 500.
+    console.error(
+      "Update availability error:",
+      error.name,
+      error.message
+    );
     res.status(500).json({
       success: false,
       message: "Server error while updating availability"
