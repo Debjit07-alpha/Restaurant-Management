@@ -9,6 +9,7 @@ const {
   resolveCustomization
 } = require("../utils/orderPricing");
 const { validateAndPriceCoupon } = require("../utils/couponService");
+const { quoteDelivery, assertMinimumOrder } = require("../utils/deliveryService");
 
 const PAYMENT_METHODS = ["Cash on Delivery", "UPI on Delivery"];
 const ORDER_STATUSES = [
@@ -179,7 +180,31 @@ const createOrder = async (req, res) => {
       }
     }
 
-    const deliveryCharge = getDeliveryCharge(subtotal - discountAmount);
+    // Delivery is quoted from DB settings + the final checkout pincode
+    // (zone match, free threshold on the payable amount, minimum order).
+    // Frontend fees/totals are never trusted; history is snapshotted.
+    const quote = await quoteDelivery({
+      pincode: address.pincode,
+      subtotal,
+      discountAmount
+    });
+    if (!quote.deliverable) {
+      return res.status(400).json({
+        success: false,
+        message:
+          quote.reason ||
+          "Delivery is currently unavailable to this location."
+      });
+    }
+    try {
+      assertMinimumOrder(quote, subtotal);
+    } catch (minimumError) {
+      return res.status(minimumError.status || 400).json({
+        success: false,
+        message: minimumError.message
+      });
+    }
+    const deliveryCharge = quote.deliveryCharge;
 
     // Generate a unique readable order id
     let orderId = generateOrderId();

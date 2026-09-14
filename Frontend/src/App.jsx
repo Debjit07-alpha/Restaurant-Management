@@ -26,6 +26,7 @@ import Users from "./pages/admin/Users";
 import Orders from "./pages/admin/Orders";
 import Reviews from "./pages/admin/Reviews";
 import Coupons from "./pages/admin/Coupons";
+import Delivery from "./pages/admin/Delivery";
 
 function App() {
   return (
@@ -231,6 +232,16 @@ function App() {
             <ProtectedRoute>
               <AdminLayout>
                 <Coupons />
+              </AdminLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/delivery"
+          element={
+            <ProtectedRoute>
+              <AdminLayout>
+                <Delivery />
               </AdminLayout>
             </ProtectedRoute>
           }

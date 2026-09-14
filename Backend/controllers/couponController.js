@@ -124,11 +124,12 @@ const parseCouponInput = (body) => {
 // =====================================
 const validateCoupon = async (req, res) => {
   try {
-    const { code, items } = req.body;
+    const { code, items, pincode } = req.body;
     const result = await validateAndPriceCoupon({
       code,
       items,
-      userId: req.user.userId
+      userId: req.user.userId,
+      pincode
     });
     res.status(200).json({
       success: true,

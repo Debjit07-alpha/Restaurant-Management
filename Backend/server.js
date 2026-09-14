@@ -15,6 +15,7 @@ const reviewRoutes = require("./routes/reviewRoutes");
 const couponRoutes = require("./routes/couponRoutes");
 const locationRoutes = require("./routes/locationRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
+const deliveryRoutes = require("./routes/deliveryRoutes");
 
 const app = express();
 
@@ -46,6 +47,7 @@ app.use("/api/reviews", reviewRoutes);
 app.use("/api/coupons", couponRoutes);
 app.use("/api/location", locationRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/delivery", deliveryRoutes);
 
 // Test route
 app.get("/", (req, res) => {

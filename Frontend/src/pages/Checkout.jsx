@@ -9,6 +9,7 @@ import { toOrderCustomization } from "../utils/customization";
 import MenuImage from "../components/MenuImage";
 import CustomizationLines from "../components/CustomizationLines";
 import CouponBox, { storeCouponCode } from "../components/CouponBox";
+import DeliveryCheck from "../components/DeliveryCheck";
 
 const inputClass =
   "mt-1 w-full border border-charcoal/20 rounded-xl px-3 py-2 bg-cream focus:outline-none focus:border-burgundy";
@@ -149,6 +150,10 @@ function Checkout() {
   }, []);
   // Backend-validated coupon (amounts come from /coupons/validate).
   const [coupon, setCoupon] = useState(null);
+  // Live delivery quote for the checkout pincode (/delivery/check).
+  // The backend re-quotes at order time; this only drives display +
+  // the unavailable-address gate.
+  const [deliveryQuote, setDeliveryQuote] = useState(null);
 
   // Pre-fill name from the logged-in user (stays editable)
   useEffect(() => {
@@ -160,9 +165,14 @@ function Checkout() {
   }, [user]);
 
   const discount = coupon?.discountAmount || 0;
-  const deliveryCharge =
-    coupon?.deliveryCharge ?? getDeliveryCharge(totalPrice - discount);
+  // Live zone quote wins when present; otherwise the coupon validation
+  // response (zone-aware when a pincode was sent); otherwise the legacy
+  // display rule. The backend always recalculates at order time.
+  const deliveryCharge = deliveryQuote
+    ? deliveryQuote.deliveryCharge
+    : (coupon?.deliveryCharge ?? getDeliveryCharge(totalPrice - discount));
   const grandTotal = totalPrice - discount + deliveryCharge;
+  const deliveryBlocked = Boolean(deliveryQuote && !deliveryQuote.deliverable);
 
   // Success screen stays on this same page after the backend confirms.
   // It must render before the empty-cart guard because the cart is
@@ -850,7 +860,17 @@ function Checkout() {
                 </div>
               ))}
             </div>
-            <CouponBox cartItems={cartItems} onCoupon={setCoupon} />
+            <CouponBox
+              cartItems={cartItems}
+              onCoupon={setCoupon}
+              pincode={form.pincode}
+            />
+            <DeliveryCheck
+              pincode={form.pincode}
+              subtotal={totalPrice}
+              discount={discount}
+              onQuote={setDeliveryQuote}
+            />
             <div className="mt-4 pt-4 border-t border-charcoal/10 space-y-2 text-sm">
               <p className="flex justify-between">
                 <span className="text-charcoal/60">Subtotal</span>
@@ -875,11 +895,17 @@ function Checkout() {
             </div>
             <button
               type="submit"
-              disabled={placing}
+              disabled={placing || deliveryBlocked}
               className="mt-6 w-full bg-charcoal text-cream rounded-full py-3 text-sm hover:bg-burgundy transition-colors disabled:opacity-50"
             >
               {placing ? "Placing order..." : "Place Order"}
             </button>
+            {deliveryBlocked && (
+              <p className="mt-2 text-[13px] text-red-700 text-center">
+                Delivery is currently unavailable to this location. Please
+                choose a supported address.
+              </p>
+            )}
           </aside>
         </form>
       </div>

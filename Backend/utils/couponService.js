@@ -2,6 +2,7 @@ const MenuItem = require("../models/MenuItem");
 const Coupon = require("../models/Coupon");
 const CouponUsage = require("../models/CouponUsage");
 const { isOrderable, unavailableMessage } = require("./menuAvailability");
+const { quoteDelivery } = require("./deliveryService");
 const {
   getDeliveryCharge,
   resolveCustomization
@@ -106,9 +107,11 @@ const isLineEligible = (line, coupon) => {
 
 // Validate a coupon code against the database and the given cart.
 // Uses the authenticated user id (never a frontend-supplied user).
+// Optional pincode picks the delivery zone fee; without it the global
+// base rule applies (cart page has no address yet).
 // Returns { coupon, subtotal, eligibleSubtotal, discountAmount,
 // deliveryCharge, totalAmount } or throws { status, message }.
-const validateAndPriceCoupon = async ({ code, items, userId }) => {
+const validateAndPriceCoupon = async ({ code, items, userId, pincode }) => {
   const normalized = String(code || "").trim().toUpperCase();
   if (!normalized) {
     const err = new Error("Enter a promo code");
@@ -196,7 +199,11 @@ const validateAndPriceCoupon = async ({ code, items, userId }) => {
     throw err;
   }
 
-  const deliveryCharge = getDeliveryCharge(subtotal - discountAmount);
+  const quote = await quoteDelivery({
+    pincode,
+    subtotal,
+    discountAmount
+  });
 
   return {
     coupon,
@@ -204,8 +211,10 @@ const validateAndPriceCoupon = async ({ code, items, userId }) => {
     subtotal,
     eligibleSubtotal,
     discountAmount,
-    deliveryCharge,
-    totalAmount: subtotal - discountAmount + deliveryCharge
+    deliveryCharge: quote.deliveryCharge,
+    estimatedDeliveryTime: quote.estimatedDeliveryTime,
+    zoneName: quote.zoneName,
+    totalAmount: subtotal - discountAmount + quote.deliveryCharge
   };
 };
 

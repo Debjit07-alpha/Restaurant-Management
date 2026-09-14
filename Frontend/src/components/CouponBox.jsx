@@ -41,8 +41,9 @@ export function storeCouponCode(code) {
 
 // Promo-code box. All amounts come from the backend (/coupons/validate);
 // the frontend only displays the backend result.
-// Props: cartItems (live cart), onCoupon(result|null).
-function CouponBox({ cartItems, onCoupon }) {
+// Props: cartItems (live cart), onCoupon(result|null), pincode (optional,
+// used for zone-aware delivery fee inside the validation response).
+function CouponBox({ cartItems, onCoupon, pincode }) {
   const [code, setCode] = useState(loadStoredCouponCode);
   const [applied, setApplied] = useState(null);
   const [error, setError] = useState("");
@@ -52,10 +53,13 @@ function CouponBox({ cartItems, onCoupon }) {
   appliedRef.current = applied;
   const onCouponRef = useRef(onCoupon);
   onCouponRef.current = onCoupon;
+  const pincodeRef = useRef(pincode);
+  pincodeRef.current = pincode;
 
   const cartSignature = JSON.stringify(
     (cartItems || []).map((e) => [e.id, e.quantity, e.price])
   );
+  const pincodeSignature = String(pincode || "").trim();
 
   const applyCode = useCallback(
     async (rawCode, { silent = false } = {}) => {
@@ -76,6 +80,9 @@ function CouponBox({ cartItems, onCoupon }) {
         const res = await api.post("/coupons/validate", {
           code: normalized,
           items: toCouponItems(cartItems),
+          ...(String(pincode || "").trim()
+            ? { pincode: String(pincode).trim() }
+            : {}),
         });
         const result = {
           couponCode: res.data.couponCode,
@@ -106,7 +113,7 @@ function CouponBox({ cartItems, onCoupon }) {
         if (!silent) setApplying(false);
       }
     },
-    [cartItems]
+    [cartItems, pincode]
   );
 
   const handleRemove = () => {
@@ -135,6 +142,9 @@ function CouponBox({ cartItems, onCoupon }) {
         const res = await api.post("/coupons/validate", {
           code: current.couponCode,
           items: toCouponItems(cartItems),
+          ...(String(pincodeRef.current || "").trim()
+            ? { pincode: String(pincodeRef.current).trim() }
+            : {}),
         });
         if (cancelled) return;
         const result = {
@@ -167,9 +177,9 @@ function CouponBox({ cartItems, onCoupon }) {
     return () => {
       cancelled = true;
     };
-    // Re-run when the cart contents change.
+    // Re-run when the cart contents or delivery pincode change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cartSignature]);
+  }, [cartSignature, pincodeSignature]);
 
   return (
     <div className="mt-4 pt-4 border-t border-charcoal/10">
