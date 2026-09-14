@@ -47,6 +47,10 @@ function Checkout() {
   const [suggestions, setSuggestions] = useState([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
+  const [selectedSearch, setSelectedSearch] = useState("");
+  // Last gate-passed GPS fix (memory only, never stored): used solely
+  // as proximity bias for address search, never for autofill.
+  const goodFixRef = useRef(null);
 
   const closeSearch = () => {
     setSearchOpen(false);
@@ -54,6 +58,7 @@ function Checkout() {
     setSuggestions([]);
     setSearching(false);
     setSearchError("");
+    setSelectedSearch("");
   };
 
   const selectSuggestion = (suggestion) => {
@@ -67,20 +72,27 @@ function Checkout() {
       (part, index, all) =>
         part && part.trim() !== "" && all.indexOf(part) === index
     );
-    setDetectedLabel(
+    const label =
       labelParts.length > 0
         ? labelParts.join(", ")
-        : suggestion.displayName || ""
-    );
+        : suggestion.displayName || "";
+    setDetectedLabel(label);
     setDebugCoords(null);
     setLocationOk(true);
     setLocationNote("Address selected.");
     if (restoreTimer.current) clearTimeout(restoreTimer.current);
     restoreTimer.current = setTimeout(() => setLocationOk(false), 3500);
-    closeSearch();
+    // Keep the chosen address visible in the search field (still
+    // editable for refining); checkout fields below are filled.
+    setSearchText(suggestion.displayName || label);
+    setSuggestions([]);
+    setSearchError("");
+    setSelectedSearch(suggestion.displayName || label);
   };
 
-  // Debounced backend search (min 3 chars, stale responses ignored).
+  // Debounced backend search (min 3 chars, 400ms, stale responses
+  // ignored). Works with no GPS; biased toward the good fix when one
+  // exists from the location button.
   useEffect(() => {
     const query = searchText.trim();
     if (!searchOpen || query.length < 3) {
@@ -89,13 +101,23 @@ function Checkout() {
       setSearchError("");
       return;
     }
+    // Don't re-search the address the user just selected.
+    if (selectedSearch && query === selectedSearch) {
+      setSuggestions([]);
+      setSearching(false);
+      return;
+    }
     let cancelled = false;
     setSearching(true);
     setSearchError("");
+    setSelectedSearch("");
     const timer = setTimeout(async () => {
       try {
+        const bias = goodFixRef.current;
         const res = await api.get("/location/autocomplete", {
-          params: { text: query },
+          params: bias
+            ? { text: query, lat: bias.latitude, lng: bias.longitude }
+            : { text: query },
           timeout: 15000,
         });
         if (!cancelled) setSuggestions(res.data.suggestions || []);
@@ -104,7 +126,7 @@ function Checkout() {
           setSuggestions([]);
           setSearchError(
             err.response?.data?.message ||
-              "Unable to search addresses right now. Please enter your address manually."
+              "Address search is temporarily unavailable. Please enter your address manually."
           );
         }
       } finally {
@@ -115,7 +137,7 @@ function Checkout() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [searchText, searchOpen]);
+  }, [searchText, searchOpen, selectedSearch]);
   const [locating, setLocating] = useState(false);
   const restoreTimer = useRef(null);
 
@@ -320,7 +342,10 @@ function Checkout() {
     setLocationNote("Detecting your location...");
     try {
       const position = await acquireAccuratePosition();
-      const { latitude, longitude } = position.coords;
+      const { latitude, longitude, accuracy } = position.coords;
+      // Gate-passed fix only: remembered for search proximity bias
+      // (memory only). Never used for autofill without a fresh request.
+      goodFixRef.current = { latitude, longitude };
       // Temporary development readout: verify on a map that these
       // coordinates point at the real location before trusting Geoapify.
       setDebugCoords({ latitude, longitude, accuracy });
@@ -628,10 +653,19 @@ function Checkout() {
                   )}
                   {!searching &&
                     !searchError &&
+                    selectedSearch && (
+                      <p className="mt-2 text-sm text-pine font-medium">
+                        ✓ Selected — checkout fields filled below. You can
+                        refine the search above or close.
+                      </p>
+                    )}
+                  {!searching &&
+                    !searchError &&
+                    !selectedSearch &&
                     searchText.trim().length >= 3 &&
                     suggestions.length === 0 && (
                       <p className="mt-2 text-sm text-charcoal/60">
-                        No matches found. Try a nearby street or landmark.
+                        No matching addresses found.
                       </p>
                     )}
                 </div>

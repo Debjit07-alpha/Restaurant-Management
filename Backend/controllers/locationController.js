@@ -364,16 +364,44 @@ const autocompleteAddress = async (req, res) => {
         message: "Address search is not configured. Please enter your address manually."
       });
     }
+    // Prefer Indian results (TastyBites serves India); optionally bias
+    // toward the user's good GPS fix when the frontend sends one.
+    // Never hardcoded to any city: works anywhere in India.
+    let url =
+      `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(text)}` +
+      `&format=json&limit=5&lang=en&filter=countrycode:in&apiKey=${encodeURIComponent(key)}`;
+    const biasLat = Number(req.query.lat);
+    const biasLng = Number(req.query.lng ?? req.query.lon);
+    if (
+      Number.isFinite(biasLat) &&
+      Number.isFinite(biasLng) &&
+      biasLat >= -90 &&
+      biasLat <= 90 &&
+      biasLng >= -180 &&
+      biasLng <= 180
+    ) {
+      url += `&bias=proximity:${encodeURIComponent(biasLng)},${encodeURIComponent(biasLat)}`;
+    }
+    const searchUrl = url.replace(
+      "/geocode/autocomplete?",
+      "/geocode/search?"
+    );
     let data;
     try {
-      data = await fetchJson(
-        `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(text)}&format=json&limit=5&lang=en&apiKey=${encodeURIComponent(key)}`
-      );
+      data = await fetchJson(url);
+      // Autocomplete is prefix-driven: when it finds nothing, the full
+      // Geocode Search engine gets one chance with the same query.
+      if (
+        (!data.results || data.results.length === 0) &&
+        (!data.features || data.features.length === 0)
+      ) {
+        data = await fetchJson(searchUrl);
+      }
     } catch (error) {
       if (error.httpStatus === 401 || error.httpStatus === 403) {
         return res.status(502).json({
           success: false,
-          message: "Unable to search addresses right now. Please enter your address manually."
+          message: "Address search is temporarily unavailable. Please enter your address manually."
         });
       }
       throw error;
@@ -402,7 +430,7 @@ const autocompleteAddress = async (req, res) => {
     console.error("Autocomplete error:", error.message);
     return res.status(502).json({
       success: false,
-      message: "Unable to search addresses right now. Please enter your address manually."
+      message: "Address search is temporarily unavailable. Please enter your address manually."
     });
   }
 };
