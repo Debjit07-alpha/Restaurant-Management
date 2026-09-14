@@ -404,9 +404,6 @@ function Navbar() {
                     role="menu"
                     className="absolute right-0 mt-2.5 w-60 rounded-2xl border border-white/10 bg-[#1d1b17]/95 backdrop-blur-md shadow-[0_25px_50px_-20px_rgba(0,0,0,0.8)] p-2 z-[70]"
                   >
-                    <p className="px-4 pt-2.5 pb-2 text-[12px] uppercase tracking-[0.14em] text-cream/40">
-                      Hi, {firstName}
-                    </p>
                     {isAdmin ? (
                       <Link
                         to="/admin/dashboard"
