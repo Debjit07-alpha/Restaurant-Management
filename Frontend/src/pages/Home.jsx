@@ -218,28 +218,28 @@ function Home() {
 
       {/* 4. SEARCH TOOLBAR: filters, sort, count, chips */}
       <section className="max-w-[1520px] mx-auto px-6 lg:px-12 pt-6">
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 bg-white border border-burgundy/20 rounded-[20px] px-4 sm:px-5 py-3.5 shadow-[0_12px_30px_-18px_rgba(217,45,32,0.45)]">
           <button
             onClick={() => setDrawerOpen(true)}
-            className="inline-flex items-center gap-2 border border-charcoal/20 rounded-full px-5 py-2.5 text-sm font-semibold hover:border-burgundy hover:text-burgundy transition-colors bg-white"
+            className="inline-flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-bold bg-burgundy text-white hover:bg-burgundy-dark active:scale-95 transition-all shadow-[0_8px_18px_-8px_rgba(217,45,32,0.8)]"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
             </svg>
             Filters
             {activeFilterCount > 0 && (
-              <span className="min-w-5 h-5 px-1.5 rounded-full bg-burgundy text-white text-xs font-bold flex items-center justify-center">
+              <span className="min-w-5 h-5 px-1.5 rounded-full bg-white text-burgundy text-xs font-bold flex items-center justify-center">
                 {activeFilterCount}
               </span>
             )}
           </button>
           <label className="ml-auto flex items-center gap-2 text-sm">
-            <span className="text-charcoal/55 font-medium">Sort By</span>
+            <span className="text-charcoal font-bold">Sort By</span>
             <select
               value={filters.sort}
               onChange={(e) => writeParams({ sort: e.target.value })}
               aria-label="Sort results"
-              className="border border-charcoal/20 rounded-full px-4 py-2.5 text-sm font-medium bg-white focus:outline-none focus:border-burgundy"
+              className="border-2 border-burgundy/30 rounded-full px-4 py-2 text-sm font-bold bg-cream text-charcoal focus:outline-none focus:border-burgundy cursor-pointer"
             >
               {SORT_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -251,8 +251,11 @@ function Home() {
         </div>
 
         {!loading && !error && (
-          <p className="mt-3 text-sm text-charcoal/60" aria-live="polite">
-            {total} food{total === 1 ? "" : "s"} found
+          <p className="mt-3 text-[15px] font-semibold text-charcoal" aria-live="polite">
+            <span className="inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-burgundy text-white text-sm font-bold mr-2">
+              {total}
+            </span>
+            food{total === 1 ? "" : "s"} found
             {loadingMore ? " · Loading more..." : ""}
           </p>
         )}
