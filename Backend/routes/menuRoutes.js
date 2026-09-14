@@ -3,6 +3,7 @@ const express = require("express");
 const {
   getMenuItems,
   getAllMenuItemsAdmin,
+  searchMenuItems,
   getMenuItem,
   createMenuItem,
   updateMenuItem,
@@ -20,6 +21,10 @@ router.get("/", getMenuItems);
 
 // Admin-only full list (includes hidden items). Declared before /:id.
 router.get("/admin/all", protect, adminOnly, getAllMenuItemsAdmin);
+
+// Customer search + filters. Declared before /:id so "search" is not
+// treated as an item id.
+router.get("/search", searchMenuItems);
 
 router.get("/:id", getMenuItem);
 

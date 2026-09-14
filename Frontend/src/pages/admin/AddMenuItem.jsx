@@ -15,6 +15,7 @@ function AddMenuItem() {
     category: "Starter",
     price: "",
     availability: "inStock",
+    foodType: "",
     image: "",
   });
   const [imageFile, setImageFile] = useState(null);
@@ -72,6 +73,9 @@ function AddMenuItem() {
         "availability",
         form.availability === "inStock" ? "true" : "false"
       );
+      if (form.foodType) {
+        data.append("foodType", form.foodType);
+      }
       if (imageFile) {
         // A newly uploaded file takes priority over the image URL.
         data.append("image", imageFile);
@@ -161,6 +165,22 @@ function AddMenuItem() {
           >
             <option value="inStock">In Stock</option>
             <option value="outOfStock">Out of Stock</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium">
+            Food Type{" "}
+            <span className="font-normal text-gray-500">(for veg/non-veg filters)</span>
+          </label>
+          <select
+            name="foodType"
+            value={form.foodType}
+            onChange={handleChange}
+            className="mt-1 w-full border rounded px-3 py-2"
+          >
+            <option value="">Unspecified</option>
+            <option value="veg">Vegetarian</option>
+            <option value="non_veg">Non-Vegetarian</option>
           </select>
         </div>
 

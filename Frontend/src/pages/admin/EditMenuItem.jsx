@@ -17,6 +17,7 @@ function EditMenuItem() {
     category: "Starter",
     price: "",
     availability: "inStock",
+    foodType: "",
     image: "",
   });
   const [imageFile, setImageFile] = useState(null);
@@ -39,6 +40,7 @@ function EditMenuItem() {
           category: item.category || "Starter",
           price: item.price ?? "",
           availability: item.availability ? "inStock" : "outOfStock",
+          foodType: item.foodType || "",
           image: item.image || "",
         });
         setCustomizations(
@@ -105,6 +107,8 @@ function EditMenuItem() {
         "availability",
         form.availability === "inStock" ? "true" : "false"
       );
+      // Empty string clears the classification (backend treats "" as unset).
+      data.append("foodType", form.foodType);
       if (imageFile) {
         // A newly uploaded file replaces the existing image.
         data.append("image", imageFile);
@@ -202,6 +206,22 @@ function EditMenuItem() {
           >
             <option value="inStock">In Stock</option>
             <option value="outOfStock">Out of Stock</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium">
+            Food Type{" "}
+            <span className="font-normal text-gray-500">(for veg/non-veg filters)</span>
+          </label>
+          <select
+            name="foodType"
+            value={form.foodType}
+            onChange={handleChange}
+            className="mt-1 w-full border rounded px-3 py-2"
+          >
+            <option value="">Unspecified</option>
+            <option value="veg">Vegetarian</option>
+            <option value="non_veg">Non-Vegetarian</option>
           </select>
         </div>
 

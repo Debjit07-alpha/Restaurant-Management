@@ -31,6 +31,15 @@ const menuItemSchema = new mongoose.Schema(
       min: 0
     },
 
+    // Vegetarian classification for search filters. Optional: items
+    // written before this field simply don't match veg/non-veg filters
+    // (never guessed). Set from Admin Add/Edit forms.
+    foodType: {
+      type: String,
+      enum: ["veg", "non_veg"],
+      default: undefined
+    },
+
     availability: {
       type: Boolean,
       default: true

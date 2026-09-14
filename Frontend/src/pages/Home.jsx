@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import api from "../api/axios";
 import Hero from "../components/home/Hero";
@@ -8,8 +8,11 @@ import OfferBanner from "../components/home/OfferBanner";
 import ServiceFeatures from "../components/home/ServiceFeatures";
 import Testimonials from "../components/home/Testimonials";
 import SiteFooter from "../components/home/SiteFooter";
-import { matchesCategory } from "../utils/categories";
-import { isHidden } from "../utils/availability";
+import FilterDrawer, { SORT_OPTIONS } from "../components/FilterDrawer";
+import { formatPrice } from "../utils/formatPrice";
+
+const PAGE_LIMIT = 20;
+const DEFAULT_AVAILABILITY = ["available", "sold_out"];
 
 function DishSkeleton() {
   return (
@@ -24,78 +27,282 @@ function DishSkeleton() {
   );
 }
 
+// Read filter state from the URL (single source of truth, shareable).
+function filtersFromParams(searchParams) {
+  const get = (key) => (searchParams.get(key) || "").trim();
+  const availability = get("availability")
+    ? get("availability").split(",").filter((v) => v === "available" || v === "sold_out")
+    : [...DEFAULT_AVAILABILITY];
+  return {
+    search: get("search"),
+    category: get("category") || "All",
+    type: get("type")
+      ? get("type").split(",").filter((t) => t === "veg" || t === "non_veg")
+      : [],
+    minPrice: get("minPrice"),
+    maxPrice: get("maxPrice"),
+    rating: get("rating"),
+    availability: availability.length > 0 ? availability : [...DEFAULT_AVAILABILITY],
+    sort: get("sort") || "relevance",
+  };
+}
+
 function Home() {
-  const [menuItems, setMenuItems] = useState([]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [items, setItems] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [retryKey, setRetryKey] = useState(0);
-  const [category, setCategory] = useState("All");
   const [expanded, setExpanded] = useState(false);
-  const [searchParams, setSearchParams] = useSearchParams();
-  const query = (searchParams.get("search") || "").trim();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const requestId = useRef(0);
 
-  useEffect(() => {
-    const fetchMenu = async () => {
-      try {
-        setLoading(true);
-        setError("");
-        const res = await api.get("/menu-items");
-        // Hidden items never reach customer surfaces (backend filters
-        // too; this guards search/category/hero lists alike).
-        setMenuItems((res.data.menuItems || []).filter((m) => !isHidden(m)));
-      } catch {
-        setError("Unable to load today's menu.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchMenu();
-  }, [retryKey]);
+  const filters = filtersFromParams(searchParams);
 
-  const q = query.toLowerCase();
-  const filtered = menuItems.filter((item) => {
-    const matchesQuery =
-      !q ||
-      item.name?.toLowerCase().includes(q) ||
-      item.description?.toLowerCase().includes(q) ||
-      item.category?.toLowerCase().includes(q);
-    return matchesCategory(item, category) && matchesQuery;
-  });
+  const isFiltering =
+    Boolean(filters.search) ||
+    filters.category !== "All" ||
+    filters.type.length > 0 ||
+    Boolean(filters.minPrice) ||
+    Boolean(filters.maxPrice) ||
+    Boolean(filters.rating) ||
+    filters.availability.length !== 2 ||
+    filters.sort !== "relevance";
 
-  const clearSearch = () => {
-    setSearchParams({}, { replace: true });
+  const activeFilterCount =
+    (filters.category !== "All" ? 1 : 0) +
+    filters.type.length +
+    (filters.minPrice || filters.maxPrice ? 1 : 0) +
+    (filters.rating ? 1 : 0) +
+    (filters.availability.length !== 2 ? 1 : 0);
+
+  const toQuery = (pageNum) => {
+    const params = { page: pageNum, limit: PAGE_LIMIT, sort: filters.sort };
+    if (filters.search) params.search = filters.search;
+    if (filters.category !== "All") params.category = filters.category;
+    if (filters.type.length > 0) params.type = filters.type.join(",");
+    if (filters.minPrice) params.minPrice = filters.minPrice;
+    if (filters.maxPrice) params.maxPrice = filters.maxPrice;
+    if (filters.rating) params.rating = filters.rating;
+    if (filters.availability.length === 1) {
+      params.availability = filters.availability[0];
+    }
+    return params;
   };
 
-  const showGridStates = loading || error || filtered.length === 0;
+  // Backend search: debounced, stale responses ignored (one request per
+  // state change). Page resets to 1 whenever filters change.
+  useEffect(() => {
+    const id = ++requestId.current;
+    setLoading(true);
+    setError("");
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.get("/menu-items/search", { params: toQuery(1) });
+        if (requestId.current !== id) return;
+        setItems(res.data.menuItems || []);
+        setTotal(Number(res.data.total) || 0);
+        setPage(1);
+        setPages(Number(res.data.pages) || 1);
+      } catch {
+        if (requestId.current !== id) return;
+        setError("Unable to load food results. Please try again.");
+      } finally {
+        if (requestId.current === id) setLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    searchParams.toString(),
+    retryKey,
+  ]);
+
+  const loadMore = async () => {
+    if (loadingMore || page >= pages) return;
+    const id = ++requestId.current;
+    setLoadingMore(true);
+    try {
+      const res = await api.get("/menu-items/search", { params: toQuery(page + 1) });
+      if (requestId.current !== id) return;
+      setItems((prev) => [...prev, ...(res.data.menuItems || [])]);
+      setTotal(Number(res.data.total) || 0);
+      setPage((p) => p + 1);
+      setPages(Number(res.data.pages) || 1);
+    } catch {
+      if (requestId.current !== id) return;
+      setError("Unable to load food results. Please try again.");
+    } finally {
+      if (requestId.current === id) setLoadingMore(false);
+    }
+  };
+
+  const writeParams = (patch) => {
+    const next = new URLSearchParams(searchParams);
+    const setOrDelete = (key, value, isDefault) => {
+      if (!value || isDefault) next.delete(key);
+      else next.set(key, value);
+    };
+    if (patch.search !== undefined) setOrDelete("search", patch.search.trim(), true);
+    if (patch.category !== undefined) setOrDelete("category", patch.category, patch.category === "All");
+    if (patch.type !== undefined) setOrDelete("type", patch.type.join(","), patch.type.length === 0);
+    if (patch.minPrice !== undefined) setOrDelete("minPrice", patch.minPrice, true);
+    if (patch.maxPrice !== undefined) setOrDelete("maxPrice", patch.maxPrice, true);
+    if (patch.rating !== undefined) setOrDelete("rating", patch.rating, true);
+    if (patch.availability !== undefined) {
+      const both = patch.availability.length !== 1;
+      setOrDelete("availability", patch.availability.join(","), both);
+    }
+    if (patch.sort !== undefined) setOrDelete("sort", patch.sort, patch.sort === "relevance");
+    setSearchParams(next, { replace: false });
+    setExpanded(false);
+  };
+
+  const clearAll = () => {
+    setSearchParams({}, { replace: false });
+    setExpanded(false);
+  };
+
+  const chips = [];
+  if (filters.search) {
+    chips.push({ key: "search", label: `“${filters.search}”`, clear: () => writeParams({ search: "" }) });
+  }
+  if (filters.category !== "All") {
+    chips.push({ key: "category", label: filters.category, clear: () => writeParams({ category: "All" }) });
+  }
+  filters.type.forEach((t) => {
+    chips.push({
+      key: `type-${t}`,
+      label: t === "veg" ? "Vegetarian" : "Non-Vegetarian",
+      clear: () => writeParams({ type: filters.type.filter((x) => x !== t) }),
+    });
+  });
+  if (filters.minPrice || filters.maxPrice) {
+    const range = `${filters.minPrice ? formatPrice(Number(filters.minPrice)) : "₹0"}–${filters.maxPrice ? formatPrice(Number(filters.maxPrice)) : "∞"}`;
+    chips.push({
+      key: "price",
+      label: range,
+      clear: () => writeParams({ minPrice: "", maxPrice: "" }),
+    });
+  }
+  if (filters.rating) {
+    chips.push({ key: "rating", label: `${filters.rating}★+`, clear: () => writeParams({ rating: "" }) });
+  }
+  if (filters.availability.length === 1) {
+    chips.push({
+      key: "availability",
+      label: filters.availability[0] === "available" ? "Available" : "Sold Out",
+      clear: () => writeParams({ availability: [...DEFAULT_AVAILABILITY] }),
+    });
+  }
+
+  const showGrid = !loading && !error && items.length > 0;
+  const showEmpty = !loading && !error && items.length === 0;
 
   return (
     <div className="bg-cream text-charcoal overflow-x-hidden">
       {/* 2. HERO */}
-      <Hero items={menuItems} />
+      <Hero items={items} />
 
       {/* 3. FOOD CATEGORIES */}
       <section className="max-w-[1520px] mx-auto px-6 lg:px-12 pt-4 pb-2">
         <CategoryFilter
-          active={category}
-          onChange={(value) => {
-            setCategory(value);
-            setExpanded(false);
-          }}
+          active={filters.category}
+          onChange={(value) => writeParams({ category: value })}
         />
       </section>
 
-      {/* 4. POPULAR TODAY (+ full results when filtering/searching) */}
-      {!showGridStates && (
+      {/* 4. SEARCH TOOLBAR: filters, sort, count, chips */}
+      <section className="max-w-[1520px] mx-auto px-6 lg:px-12 pt-6">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => setDrawerOpen(true)}
+            className="inline-flex items-center gap-2 border border-charcoal/20 rounded-full px-5 py-2.5 text-sm font-semibold hover:border-burgundy hover:text-burgundy transition-colors bg-white"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+            </svg>
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="min-w-5 h-5 px-1.5 rounded-full bg-burgundy text-white text-xs font-bold flex items-center justify-center">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+          <label className="ml-auto flex items-center gap-2 text-sm">
+            <span className="text-charcoal/55 font-medium">Sort By</span>
+            <select
+              value={filters.sort}
+              onChange={(e) => writeParams({ sort: e.target.value })}
+              aria-label="Sort results"
+              className="border border-charcoal/20 rounded-full px-4 py-2.5 text-sm font-medium bg-white focus:outline-none focus:border-burgundy"
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {!loading && !error && (
+          <p className="mt-3 text-sm text-charcoal/60" aria-live="polite">
+            {total} food{total === 1 ? "" : "s"} found
+            {loadingMore ? " · Loading more..." : ""}
+          </p>
+        )}
+
+        {chips.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {chips.map((chip) => (
+              <button
+                key={chip.key}
+                onClick={chip.clear}
+                aria-label={`Remove ${chip.label} filter`}
+                className="inline-flex items-center gap-1.5 border border-charcoal/15 bg-white rounded-full px-3.5 py-1.5 text-[13px] font-medium hover:border-burgundy hover:text-burgundy transition-colors"
+              >
+                {chip.label} <span aria-hidden>×</span>
+              </button>
+            ))}
+            <button
+              onClick={clearAll}
+              className="text-[13px] font-semibold text-burgundy hover:text-burgundy-dark"
+            >
+              Clear All
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* 5. RESULTS */}
+      {showGrid && (
         <PopularDishes
-          items={filtered}
-          expanded={expanded || Boolean(query)}
+          items={items}
+          expanded={expanded || isFiltering}
           onToggleExpanded={() => setExpanded((v) => !v)}
         />
       )}
 
-      {(loading || error || filtered.length === 0) && (
+      {showGrid && page < pages && (
+        <div className="max-w-[1520px] mx-auto px-6 lg:px-12 pb-4 text-center">
+          <button
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="border border-charcoal/20 rounded-full px-10 py-3 text-sm font-semibold hover:border-burgundy hover:text-burgundy transition-colors disabled:opacity-50 bg-white"
+          >
+            {loadingMore ? "Loading..." : "Load More"}
+          </button>
+        </div>
+      )}
+
+      {(loading || error || showEmpty) && (
         <section className="max-w-[1520px] mx-auto px-6 lg:px-12 py-10">
-          {loading && (
+          {loading && items.length === 0 && (
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
               {[0, 1, 2, 3].map((i) => (
                 <DishSkeleton key={i} />
@@ -113,34 +320,40 @@ function Home() {
               </button>
             </div>
           )}
-          {!loading && !error && filtered.length === 0 && (
+          {showEmpty && (
             <div className="text-center py-8">
-              <p className="font-display font-semibold text-3xl">No dishes available yet.</p>
-              <p className="text-charcoal/60 mt-2">Please check back soon.</p>
-              {(query || category !== "All") && (
+              <p className="text-5xl" aria-hidden>🔍</p>
+              <p className="font-display font-semibold text-3xl mt-4">No dishes found.</p>
+              <p className="text-charcoal/60 mt-2">
+                Try changing your filters or search term.
+              </p>
+              <div className="mt-6 flex items-center justify-center gap-3">
                 <button
-                  onClick={() => {
-                    clearSearch();
-                    setCategory("All");
-                  }}
-                  className="mt-4 text-sm text-burgundy hover:text-burgundy-dark font-semibold"
+                  onClick={clearAll}
+                  className="bg-burgundy text-white px-8 py-2.5 rounded-full text-sm font-semibold hover:bg-burgundy-dark transition-colors"
                 >
-                  Clear filters
+                  Clear Filters
                 </button>
-              )}
+                <button
+                  onClick={clearAll}
+                  className="border border-charcoal/20 px-8 py-2.5 rounded-full text-sm font-semibold hover:border-burgundy hover:text-burgundy transition-colors"
+                >
+                  Browse All
+                </button>
+              </div>
             </div>
           )}
         </section>
       )}
 
-      {query && filtered.length > 0 && (
+      {filters.search && items.length > 0 && !loading && (
         <div className="max-w-[1520px] mx-auto px-6 lg:px-12 pb-2 flex items-center justify-center gap-3 text-sm">
           <p className="text-charcoal/60">
             Showing results for{" "}
-            <span className="font-semibold text-charcoal">&ldquo;{query}&rdquo;</span>
+            <span className="font-semibold text-charcoal">&ldquo;{filters.search}&rdquo;</span>
           </p>
           <button
-            onClick={clearSearch}
+            onClick={() => writeParams({ search: "" })}
             className="text-burgundy hover:text-burgundy-dark font-semibold"
           >
             Clear
@@ -148,19 +361,34 @@ function Home() {
         </div>
       )}
 
-      {/* 5. SPECIAL OFFER BANNER */}
-      <OfferBanner items={menuItems} />
+      {/* 6. SPECIAL OFFER BANNER */}
+      <OfferBanner items={items} />
 
-      {/* 6. SERVICE FEATURES */}
+      {/* 7. SERVICE FEATURES */}
       <ServiceFeatures />
 
-      {/* 7. CUSTOMER REVIEWS */}
+      {/* 8. CUSTOMER REVIEWS */}
       <div className="bg-cream-dark/40">
         <Testimonials />
       </div>
 
-      {/* 8. FOOTER */}
+      {/* 9. FOOTER */}
       <SiteFooter />
+
+      <FilterDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        filters={{
+          category: filters.category,
+          type: filters.type,
+          minPrice: filters.minPrice,
+          maxPrice: filters.maxPrice,
+          rating: filters.rating,
+          availability: filters.availability,
+        }}
+        onChange={(draft) => writeParams(draft)}
+        onClear={clearAll}
+      />
     </div>
   );
 }

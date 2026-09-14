@@ -143,6 +143,159 @@ const getAllMenuItemsAdmin = async (req, res) => {
 };
 
 // =============================
+// SEARCH MENU ITEMS (customer search + filters + sort + pagination)
+// GET /api/menu-items/search?search=&category=&type=&minPrice=&maxPrice=
+//   &rating=&availability=&sort=&page=&limit=
+// Hidden items are always excluded server-side. Unrated items are
+// excluded only when an explicit rating filter is set (never assumed
+// 5 stars). Sort relevance needs no AI: deterministic field scoring.
+// =============================
+const searchMenuItems = async (req, res) => {
+  try {
+    const {
+      category,
+      type,
+      minPrice,
+      maxPrice,
+      rating,
+      availability,
+      sort,
+      page,
+      limit
+    } = req.query;
+
+    const query = String(req.query.search || "").trim().slice(0, 100);
+    const tokens = query.split(/\s+/).filter(Boolean).slice(0, 10);
+
+    const andClauses = [
+      // Hidden items never reach customers, in any sort/filter combo.
+      { availabilityStatus: { $ne: "hidden" } }
+    ];
+
+    // Smart text search: ANY token in name/category/description.
+    if (tokens.length > 0) {
+      const {
+        tokenMatchConditions: tokenConditions
+      } = require("../utils/menuSearch");
+      andClauses.push({ $or: tokenConditions(tokens) });
+    }
+
+    // Keyword category tab (same map as the frontend tabs).
+    const { categoryConditions } = require("../utils/menuSearch");
+    const catConditions = categoryConditions(category);
+    if (catConditions) {
+      andClauses.push({ $or: catConditions });
+    }
+
+    // Veg / non-veg (legacy items without foodType match neither).
+    if (type) {
+      const wanted = String(type)
+        .split(",")
+        .map((t) => t.trim().toLowerCase())
+        .filter((t) => t === "veg" || t === "non_veg");
+      if (wanted.length > 0) {
+        andClauses.push({ foodType: { $in: wanted } });
+      }
+    }
+
+    // Price range on the base menu price.
+    const priceFilter = {};
+    const lo = Number(minPrice);
+    const hi = Number(maxPrice);
+    if (minPrice !== undefined && minPrice !== "" && Number.isFinite(lo) && lo >= 0) {
+      priceFilter.$gte = lo;
+    }
+    if (maxPrice !== undefined && maxPrice !== "" && Number.isFinite(hi) && hi >= 0) {
+      priceFilter.$lte = hi;
+    }
+    if (Object.keys(priceFilter).length > 0) {
+      andClauses.push({ price: priceFilter });
+    }
+
+    // Minimum average rating (unrated items excluded under this filter).
+    const minRating = Number(rating);
+    if (rating !== undefined && rating !== "" && Number.isFinite(minRating) && minRating > 0) {
+      andClauses.push({ ratingAverage: { $gte: minRating } });
+      andClauses.push({ ratingCount: { $gt: 0 } });
+    }
+
+    // Availability (hidden already excluded above, always).
+    if (availability === "available") {
+      andClauses.push({
+        $or: [
+          { availabilityStatus: "available" },
+          { availabilityStatus: { $exists: false }, availability: { $ne: false } }
+        ]
+      });
+    } else if (availability === "sold_out") {
+      andClauses.push({
+        $or: [
+          { availabilityStatus: "sold_out" },
+          { availabilityStatus: { $exists: false }, availability: false }
+        ]
+      });
+    }
+
+    const pipeline = [{ $match: { $and: andClauses } }];
+
+    // Sorting. Relevance without a query falls back to newest so the
+    // default view keeps its current order.
+    const sortKey = String(sort || "relevance");
+    if (sortKey === "relevance" && tokens.length > 0) {
+      const { relevanceScoreExpression } = require("../utils/menuSearch");
+      pipeline.push({
+        $addFields: { _relevance: relevanceScoreExpression(query, tokens) }
+      });
+      pipeline.push({ $sort: { _relevance: -1, createdAt: -1 } });
+    } else if (sortKey === "popular") {
+      // No true popularity field exists: most-reviewed first is the
+      // closest reliable signal (documented, never invented).
+      pipeline.push({ $sort: { ratingCount: -1, ratingAverage: -1, createdAt: -1 } });
+    } else if (sortKey === "rating") {
+      pipeline.push({ $sort: { ratingAverage: -1, ratingCount: -1, createdAt: -1 } });
+    } else if (sortKey === "price_asc") {
+      pipeline.push({ $sort: { price: 1, createdAt: -1 } });
+    } else if (sortKey === "price_desc") {
+      pipeline.push({ $sort: { price: -1, createdAt: -1 } });
+    } else {
+      pipeline.push({ $sort: { createdAt: -1 } });
+    }
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const perPage = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
+
+    pipeline.push({
+      $facet: {
+        items: [
+          { $skip: (pageNum - 1) * perPage },
+          { $limit: perPage },
+          { $project: { _relevance: 0 } }
+        ],
+        total: [{ $count: "count" }]
+      }
+    });
+
+    const [result] = await MenuItem.aggregate(pipeline);
+    const total = result?.total?.[0]?.count || 0;
+
+    res.status(200).json({
+      success: true,
+      menuItems: result?.items || [],
+      total,
+      page: pageNum,
+      limit: perPage,
+      pages: Math.max(1, Math.ceil(total / perPage))
+    });
+  } catch (error) {
+    console.error("Search menu items error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Server error while searching menu items"
+    });
+  }
+};
+
+// =============================
 // GET SINGLE MENU ITEM
 // =============================
 const getMenuItem = async (req, res) => {
@@ -182,6 +335,7 @@ const createMenuItem = async (req, res) => {
       price,
       availability,
       availabilityStatus,
+      foodType,
       image
     } = req.body;
 
@@ -190,6 +344,22 @@ const createMenuItem = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Name, description, category and price are required"
+      });
+    }
+
+    // Optional veg classification (admin-set, never inferred).
+    const parsedFoodType =
+      foodType === undefined || foodType === null || foodType === ""
+        ? undefined
+        : String(foodType).trim().toLowerCase();
+    if (
+      parsedFoodType !== undefined &&
+      parsedFoodType !== "veg" &&
+      parsedFoodType !== "non_veg"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid food type"
       });
     }
 
@@ -261,6 +431,7 @@ const createMenuItem = async (req, res) => {
       price: numericPrice,
       availability: status === "available",
       availabilityStatus: status,
+      ...(parsedFoodType !== undefined ? { foodType: parsedFoodType } : {}),
       image: imageUrl || "",
       ...(customizationOptions !== undefined ? { customizationOptions } : {})
     });
@@ -301,12 +472,31 @@ const updateMenuItem = async (req, res) => {
       price,
       availability,
       availabilityStatus,
+      foodType,
       image
     } = req.body;
 
     menuItem.name = name ?? menuItem.name;
     menuItem.description = description ?? menuItem.description;
     menuItem.category = category ?? menuItem.category;
+    if (foodType !== undefined) {
+      if (
+        foodType === null ||
+        foodType === "" ||
+        String(foodType).trim().toLowerCase() === "unspecified"
+      ) {
+        menuItem.foodType = undefined;
+      } else {
+        const parsed = String(foodType).trim().toLowerCase();
+        if (parsed !== "veg" && parsed !== "non_veg") {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid food type"
+          });
+        }
+        menuItem.foodType = parsed;
+      }
+    }
     if (req.body.customizationOptions !== undefined) {
       let nextOptions;
       try {
@@ -507,6 +697,7 @@ const deleteMenuItem = async (req, res) => {
 module.exports = {
   getMenuItems,
   getAllMenuItemsAdmin,
+  searchMenuItems,
   getMenuItem,
   createMenuItem,
   updateMenuItem,
