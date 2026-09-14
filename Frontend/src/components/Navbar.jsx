@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
@@ -27,6 +27,9 @@ function Navbar() {
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  // Which homepage section is currently in view (drives the underline
+  // for Menu/About/Offers/Contact, which are in-page scrolls).
+  const [activeSection, setActiveSection] = useState("home");
 
   const handleLogout = () => {
     logout();
@@ -36,10 +39,33 @@ function Navbar() {
 
   const closeMenu = () => setOpen(false);
 
+  // Keep the underline in sync with the visible homepage section.
+  useEffect(() => {
+    if (location.pathname !== "/") return;
+    const ids = ["menu", "about", "offers", "contact"];
+    const elements = ids
+      .map((id) => document.getElementById(id))
+      .filter(Boolean);
+    if (elements.length === 0) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setActiveSection(entry.target.id);
+          }
+        }
+      },
+      { rootMargin: "-40% 0px -55% 0px" }
+    );
+    elements.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, [location.pathname]);
+
   // Section links live on the homepage: scroll in place, or go home first.
   const goToSection = (id) => (e) => {
     e.preventDefault();
     closeMenu();
+    setActiveSection(id);
     if (location.pathname === "/") {
       scrollToId(id);
     } else {
@@ -123,22 +149,25 @@ function Navbar() {
         <div className="hidden lg:flex items-center gap-8 text-[16px] ml-4">
           <Link
             to="/"
-            onClick={closeMenu}
+            onClick={() => {
+              closeMenu();
+              setActiveSection("home");
+            }}
             className={`relative pb-1 transition-colors ${
-              location.pathname === "/"
+              location.pathname === "/" && activeSection === "home"
                 ? "text-burgundy font-semibold"
                 : "text-charcoal/80 hover:text-burgundy"
             }`}
           >
             Home
-            {location.pathname === "/" && (
+            {location.pathname === "/" && activeSection === "home" && (
               <span className="absolute left-0 right-0 -bottom-0.5 h-[2.5px] rounded-full bg-burgundy" />
             )}
           </Link>
-          {navLink("Menu", false, goToSection("menu"))}
-          {navLink("About", false, goToSection("about"))}
-          {navLink("Offers", false, goToSection("offers"))}
-          {navLink("Contact", false, goToSection("contact"))}
+          {navLink("Menu", location.pathname === "/" && activeSection === "menu", goToSection("menu"))}
+          {navLink("About", location.pathname === "/" && activeSection === "about", goToSection("about"))}
+          {navLink("Offers", location.pathname === "/" && activeSection === "offers", goToSection("offers"))}
+          {navLink("Contact", location.pathname === "/" && activeSection === "contact", goToSection("contact"))}
         </div>
 
         {/* Search */}
