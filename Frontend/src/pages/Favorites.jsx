@@ -5,23 +5,30 @@ import { formatPrice } from "../utils/formatPrice";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { useFavorites } from "../hooks/useFavorites";
+import { isOrderable, isSoldOut } from "../utils/availability";
 import MenuImage from "../components/MenuImage";
 
 function FavoriteCard({ item, onRemoved }) {
   const { addItem } = useCart();
   const { toggleFavorite, pendingId } = useFavorites();
   const [cartMessage, setCartMessage] = useState("");
-  const outOfStock = !item.availability;
+  // Favorites are never deleted on status change; sold-out/hidden
+  // items stay visible here but cannot be added to cart.
+  const outOfStock = !isOrderable(item);
   const toggling = pendingId === item._id;
 
   const handleAddToCart = () => {
     if (outOfStock) {
-      setCartMessage(`${item.name} is currently out of stock.`);
+      setCartMessage(
+        isSoldOut(item)
+          ? `${item.name} is currently sold out.`
+          : `${item.name} is currently unavailable.`
+      );
       return;
     }
     const ok = addItem(item, 1);
     setCartMessage(
-      ok ? `${item.name} added to your cart.` : `${item.name} is currently out of stock.`
+      ok ? `${item.name} added to your cart.` : `${item.name} is currently unavailable.`
     );
   };
 
@@ -83,7 +90,9 @@ function FavoriteCard({ item, onRemoved }) {
         )}
         <p className="text-burgundy font-bold mt-1">{formatPrice(item.price)}</p>
         {outOfStock && (
-          <p className="text-xs font-medium text-charcoal/50 mt-1">Out of Stock</p>
+          <p className="text-xs font-medium text-charcoal/50 mt-1">
+            {isSoldOut(item) ? "♥ Sold Out" : "Unavailable"}
+          </p>
         )}
         {cartMessage && (
           <p role="status" className="text-[13px] text-pine mt-1">{cartMessage}</p>

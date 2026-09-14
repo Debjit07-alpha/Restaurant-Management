@@ -1,6 +1,7 @@
 const MenuItem = require("../models/MenuItem");
 const Coupon = require("../models/Coupon");
 const CouponUsage = require("../models/CouponUsage");
+const { isOrderable, unavailableMessage } = require("./menuAvailability");
 const {
   getDeliveryCharge,
   resolveCustomization
@@ -52,10 +53,8 @@ const priceCartItems = async (items) => {
       err.status = 404;
       throw err;
     }
-    if (!menuItem.availability) {
-      const err = new Error(
-        `${menuItem.name} is currently out of stock and cannot be ordered`
-      );
+    if (!isOrderable(menuItem)) {
+      const err = new Error(unavailableMessage(menuItem));
       err.status = 400;
       throw err;
     }

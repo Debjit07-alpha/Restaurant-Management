@@ -1,5 +1,9 @@
 const MenuItem = require("../models/MenuItem");
 const { cloudinary, isCloudinaryConfigured } = require("../config/cloudinary");
+const {
+  parseStatus,
+  resolveStatus
+} = require("../utils/menuAvailability");
 
 // =============================
 // IMAGE HELPERS
@@ -94,6 +98,32 @@ const getCloudinaryPublicId = (url) => {
 // =============================
 const getMenuItems = async (req, res) => {
   try {
+    // Customer listing: hidden items never appear here. Admins use the
+    // dedicated admin endpoint below so hidden items stay manageable.
+    const menuItems = await MenuItem.find({
+      availabilityStatus: { $ne: "hidden" }
+    }).sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: menuItems.length,
+      menuItems
+    });
+  } catch (error) {
+    console.error("Get menu items error:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Server error while fetching menu items"
+    });
+  }
+};
+
+// =============================
+// GET ALL MENU ITEMS (Admin, includes hidden)
+// =============================
+const getAllMenuItemsAdmin = async (req, res) => {
+  try {
     const menuItems = await MenuItem.find().sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -150,6 +180,7 @@ const createMenuItem = async (req, res) => {
       category,
       price,
       availability,
+      availabilityStatus,
       image
     } = req.body;
 
@@ -159,6 +190,21 @@ const createMenuItem = async (req, res) => {
         success: false,
         message: "Name, description, category and price are required"
       });
+    }
+
+    // Three-state availability wins when supplied; otherwise the legacy
+    // boolean maps to available/sold_out.
+    let status = parseStatus(availabilityStatus);
+    if (availabilityStatus !== undefined && status === null) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid availability status"
+      });
+    }
+    if (status === null) {
+      status = parseAvailability(availability, true)
+        ? "available"
+        : "sold_out";
     }
 
     let customizationOptions;
@@ -212,7 +258,8 @@ const createMenuItem = async (req, res) => {
       description,
       category,
       price: numericPrice,
-      availability: parseAvailability(availability, true),
+      availability: status === "available",
+      availabilityStatus: status,
       image: imageUrl || "",
       ...(customizationOptions !== undefined ? { customizationOptions } : {})
     });
@@ -252,6 +299,7 @@ const updateMenuItem = async (req, res) => {
       category,
       price,
       availability,
+      availabilityStatus,
       image
     } = req.body;
 
@@ -284,11 +332,28 @@ const updateMenuItem = async (req, res) => {
       }
       menuItem.price = numericPrice;
     }
-    if (availability !== undefined) {
-      menuItem.availability = parseAvailability(
-        availability,
-        menuItem.availability
-      );
+    if (availabilityStatus !== undefined) {
+      // Explicit three-state change (quick toggle or full edit form).
+      const status = parseStatus(availabilityStatus);
+      if (status === null) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid availability status"
+        });
+      }
+      menuItem.availabilityStatus = status;
+      menuItem.availability = status === "available";
+    } else if (availability !== undefined) {
+      // Legacy boolean edit: maps to available/sold_out and never
+      // silently unhides a hidden item.
+      if (resolveStatus(menuItem) !== "hidden") {
+        const available = parseAvailability(
+          availability,
+          menuItem.availability
+        );
+        menuItem.availabilityStatus = available ? "available" : "sold_out";
+        menuItem.availability = available;
+      }
     }
 
     if (req.file) {
@@ -350,6 +415,43 @@ const updateMenuItem = async (req, res) => {
 };
 
 // =============================
+// UPDATE AVAILABILITY (Admin quick toggle)
+// PATCH /api/menu-items/:id/availability { availabilityStatus }
+// =============================
+const updateAvailability = async (req, res) => {
+  try {
+    const status = parseStatus(req.body.availabilityStatus);
+    if (status === null) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid availability status"
+      });
+    }
+    const menuItem = await MenuItem.findById(req.params.id);
+    if (!menuItem) {
+      return res.status(404).json({
+        success: false,
+        message: "Menu item not found"
+      });
+    }
+    menuItem.availabilityStatus = status;
+    menuItem.availability = status === "available";
+    await menuItem.save();
+    res.status(200).json({
+      success: true,
+      message: "Availability updated successfully",
+      menuItem
+    });
+  } catch (error) {
+    console.error("Update availability error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Server error while updating availability"
+    });
+  }
+};
+
+// =============================
 // DELETE MENU ITEM
 // =============================
 const deleteMenuItem = async (req, res) => {
@@ -381,8 +483,10 @@ const deleteMenuItem = async (req, res) => {
 
 module.exports = {
   getMenuItems,
+  getAllMenuItemsAdmin,
   getMenuItem,
   createMenuItem,
   updateMenuItem,
+  updateAvailability,
   deleteMenuItem
 };

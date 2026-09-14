@@ -5,6 +5,7 @@ import { formatPrice } from "../utils/formatPrice";
 import { useCart } from "../context/CartContext";
 import { useFavorites } from "../hooks/useFavorites";
 import { formatRating } from "../components/ProductReviews";
+import { isHidden, isOrderable } from "../utils/availability";
 import MenuImage from "../components/MenuImage";
 import MenuCard from "../components/MenuCard";
 import ProductReviews from "../components/ProductReviews";
@@ -31,7 +32,12 @@ function MenuItemDetails() {
           const all = await api.get("/menu-items");
           setRelated(
             (all.data.menuItems || [])
-              .filter((m) => m._id !== current._id && m.category === current.category)
+              .filter(
+                (m) =>
+                  m._id !== current._id &&
+                  m.category === current.category &&
+                  !isHidden(m)
+              )
               .slice(0, 4)
           );
         }
@@ -76,7 +82,11 @@ function MenuItemDetails() {
 
   if (!item) return <p className="p-6 text-center">Menu item not found.</p>;
 
-  const outOfStock = !item.availability;
+  // Hidden items have no customer details page (admins manage them in
+  // Admin → Menu Items; ordering stays blocked server-side regardless).
+  if (isHidden(item)) return <p className="p-6 text-center">Menu item not found.</p>;
+
+  const outOfStock = !isOrderable(item);
   const favorite = isFavorite(item._id);
 
   return (
@@ -145,7 +155,7 @@ function MenuItemDetails() {
             <p className="mt-5 text-sm">
               {outOfStock ? (
                 <span className="inline-block rounded-full bg-charcoal/85 text-cream px-4 py-1.5 font-medium">
-                  Out of Stock
+                  Sold Out
                 </span>
               ) : (
                 <span className="inline-block rounded-full bg-pine/10 text-pine px-4 py-1.5 font-medium">
@@ -175,13 +185,21 @@ function MenuItemDetails() {
               </div>
             </div>
 
-            <button
-              onClick={() => addItem(item, quantity)}
-              disabled={outOfStock}
-              className="mt-7 w-full sm:w-auto sm:min-w-[260px] bg-burgundy text-white rounded-[28px] h-[54px] px-10 text-[16px] font-semibold hover:bg-burgundy-dark transition-all hover:-translate-y-0.5 shadow-[0_10px_25px_-10px_rgba(217,45,32,0.6)] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
-            >
-              Add to Cart · {formatPrice(item.price * quantity)}
-            </button>
+            {outOfStock ? (
+              <p
+                aria-label={`${item.name} is sold out`}
+                className="mt-7 w-full sm:w-auto sm:min-w-[260px] bg-charcoal/10 text-charcoal/55 rounded-[28px] h-[54px] px-10 text-[16px] font-semibold flex items-center justify-center"
+              >
+                Sold Out
+              </p>
+            ) : (
+              <button
+                onClick={() => addItem(item, quantity)}
+                className="mt-7 w-full sm:w-auto sm:min-w-[260px] bg-burgundy text-white rounded-[28px] h-[54px] px-10 text-[16px] font-semibold hover:bg-burgundy-dark transition-all hover:-translate-y-0.5 shadow-[0_10px_25px_-10px_rgba(217,45,32,0.6)]"
+              >
+                Add to Cart · {formatPrice(item.price * quantity)}
+              </button>
+            )}
           </div>
         </div>
 

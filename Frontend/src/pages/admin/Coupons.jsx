@@ -76,7 +76,7 @@ function Coupons() {
 
   const fetchMenuItems = async () => {
     try {
-      const res = await api.get("/menu-items");
+      const res = await api.get("/menu-items/admin/all");
       setMenuItems(res.data.menuItems || []);
     } catch {
       // Product scoping is optional; the form still works without it.

@@ -3,6 +3,10 @@ import {
   buildConfigKey,
   getCustomizationOptions,
 } from "../utils/customization";
+import {
+  isOrderable,
+  resolveAvailabilityStatus,
+} from "../utils/availability";
 
 const CartContext = createContext(null);
 const STORAGE_KEY = "tastybites_cart";
@@ -43,9 +47,9 @@ export function CartProvider({ children }) {
   }, [cartItems]);
 
   // Add a menu item; same item increases quantity instead of duplicating.
-  // Out of Stock items can never be added.
+  // Sold-out/hidden items can never be added.
   const addItem = (menuItem, quantity = 1) => {
-    if (!menuItem || !menuItem.availability) return false;
+    if (!menuItem || !isOrderable(menuItem)) return false;
 
     const id = menuItem._id;
     setCartItems((prev) => {
@@ -70,6 +74,7 @@ export function CartProvider({ children }) {
           image: menuItem.image || "",
           quantity,
           customization: null,
+          availabilityStatus: resolveAvailabilityStatus(menuItem),
           // Groups snapshot so Cart -> Customize can open the modal later.
           optionGroups: getCustomizationOptions(menuItem),
         },
@@ -84,7 +89,7 @@ export function CartProvider({ children }) {
     menuItem,
     { quantity = 1, selections = [], specialInstructions = "", unitPrice }
   ) => {
-    if (!menuItem || !menuItem.availability) return false;
+    if (!menuItem || !isOrderable(menuItem)) return false;
     const qty = Number(quantity) || 1;
     if (qty < 1) return false;
 
@@ -122,6 +127,7 @@ export function CartProvider({ children }) {
           image: menuItem.image || "",
           quantity: qty,
           customization,
+          availabilityStatus: resolveAvailabilityStatus(menuItem),
         },
       ];
     });
@@ -149,7 +155,16 @@ export function CartProvider({ children }) {
         price: current.customization?.basePrice ?? current.price,
         image: current.image,
       };
-      if (source.availability === false) return prev;
+      // Customization re-opens only for orderable lines; the stored
+      // status reflects availability when the line was added/edited.
+      if (
+        !isOrderable({
+          availabilityStatus: current.availabilityStatus,
+          availability: source.availability,
+        })
+      ) {
+        return prev;
+      }
 
       const basePrice =
         Number(source.price) || current.customization?.basePrice || 0;

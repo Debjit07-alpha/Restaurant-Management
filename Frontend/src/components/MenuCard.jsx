@@ -3,12 +3,15 @@ import { formatPrice } from "../utils/formatPrice";
 import { useCart } from "../context/CartContext";
 import { useFavorites } from "../hooks/useFavorites";
 import { formatRating } from "./ProductReviews";
+import { isHidden, isOrderable } from "../utils/availability";
 import MenuImage from "./MenuImage";
 
 function MenuCard({ item }) {
   const { cartItems, addItem, increaseQty, decreaseQty, removeItem } = useCart();
   const { isFavorite, toggleFavorite, pendingId } = useFavorites();
-  const outOfStock = !item.availability;
+  // Hidden items never render on customer surfaces.
+  if (isHidden(item)) return null;
+  const outOfStock = !isOrderable(item);
   const favorite = isFavorite(item._id);
   const toggling = pendingId === item._id;
   // The inline stepper reflects plain (non-customized) cart lines only;
@@ -74,7 +77,7 @@ function MenuCard({ item }) {
         )}
         {outOfStock && (
           <span className="absolute bottom-3 right-3 rounded-full bg-charcoal/85 px-3 py-1 text-xs font-medium text-cream">
-            Out of Stock
+            Sold Out
           </span>
         )}
       </div>
@@ -89,12 +92,18 @@ function MenuCard({ item }) {
           <p className="text-[19px] font-bold text-burgundy">
             {formatPrice(item.price)}
           </p>
-          {cartQty === 0 ? (
+          {outOfStock ? (
+            <span
+              aria-label={`${item.name} is sold out`}
+              className="h-11 px-5 rounded-full bg-charcoal/10 text-charcoal/55 text-sm font-semibold flex items-center justify-center whitespace-nowrap"
+            >
+              Sold Out
+            </span>
+          ) : cartQty === 0 ? (
             <button
               onClick={() => addItem(item, 1)}
-              disabled={outOfStock}
               aria-label={`Add ${item.name} to cart`}
-              className="w-11 h-11 rounded-full bg-burgundy text-white text-[22px] leading-none flex items-center justify-center hover:bg-burgundy-dark active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_8px_18px_-8px_rgba(217,45,32,0.8)]"
+              className="w-11 h-11 rounded-full bg-burgundy text-white text-[22px] leading-none flex items-center justify-center hover:bg-burgundy-dark active:scale-95 transition-all shadow-[0_8px_18px_-8px_rgba(217,45,32,0.8)]"
             >
               +
             </button>

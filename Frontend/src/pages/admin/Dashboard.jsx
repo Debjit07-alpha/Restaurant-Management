@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import api from "../../api/axios";
 import { useAuth } from "../../context/AuthContext";
 import { formatPrice } from "../../utils/formatPrice";
+import { resolveAvailabilityStatus } from "../../utils/availability";
 
 const statusStyles = {
   Pending: "bg-amber-100 text-amber-800",
@@ -123,7 +124,8 @@ function Dashboard() {
       try {
         setLoading(true);
         const [menuRes, userRes, orderRes] = await Promise.all([
-          api.get("/menu-items"),
+          // Admin list includes hidden items for accurate counts.
+          api.get("/menu-items/admin/all"),
           api.get("/users"),
           api.get("/orders"),
         ]);
@@ -143,7 +145,15 @@ function Dashboard() {
     (sum, order) => sum + (Number(order.totalAmount) || 0),
     0
   );
-  const availableCount = menuItems.filter((item) => item.availability).length;
+  const availableCount = menuItems.filter(
+    (item) => resolveAvailabilityStatus(item) === "available"
+  ).length;
+  const soldOutCount = menuItems.filter(
+    (item) => resolveAvailabilityStatus(item) === "sold_out"
+  ).length;
+  const hiddenCount = menuItems.filter(
+    (item) => resolveAvailabilityStatus(item) === "hidden"
+  ).length;
   const pendingCount = orders.filter(
     (order) => order.orderStatus === "Pending"
   ).length;
@@ -220,7 +230,7 @@ function Dashboard() {
           iconBg="bg-white text-orange-600 shadow-sm"
           label="Total Menu Items"
           value={menuItems.length}
-          sub={`${availableCount} available now`}
+          sub={`${availableCount} available · ${soldOutCount} sold out · ${hiddenCount} hidden`}
           delay={0}
           icon={
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>

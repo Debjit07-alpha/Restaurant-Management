@@ -1,6 +1,7 @@
 const Order = require("../models/Order");
 const MenuItem = require("../models/MenuItem");
 const CouponUsage = require("../models/CouponUsage");
+const { isOrderable } = require("../utils/menuAvailability");
 const {
   FREE_DELIVERY_ABOVE,
   DELIVERY_CHARGE,
@@ -88,8 +89,10 @@ const createOrder = async (req, res) => {
     }
 
     // Build order items from current MongoDB prices (never trust frontend).
-    // Reject the whole order if any item is missing or out of stock.
+    // Reject the whole order if any item is missing, sold out or hidden,
+    // naming the culprits so the customer knows what to remove.
     const orderItems = [];
+    const unavailableItems = [];
     for (const entry of items) {
       const quantity = Number(entry.quantity);
       if (!entry.menuItem || !Number.isInteger(quantity) || quantity < 1) {
@@ -107,11 +110,9 @@ const createOrder = async (req, res) => {
         });
       }
 
-      if (!menuItem.availability) {
-        return res.status(400).json({
-          success: false,
-          message: `${menuItem.name} is currently out of stock and cannot be ordered`
-        });
+      if (!isOrderable(menuItem)) {
+        unavailableItems.push(menuItem.name);
+        continue;
       }
 
       // Customized entries: validate selections against the menu item's
@@ -143,6 +144,13 @@ const createOrder = async (req, res) => {
         ...(customizationSnapshot
           ? { customization: customizationSnapshot }
           : {})
+      });
+    }
+
+    if (unavailableItems.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Some items in your cart are no longer available: ${unavailableItems.join(", ")}. Please remove them and try again.`
       });
     }
 
@@ -378,8 +386,8 @@ const reorderOrder = async (req, res) => {
     for (const entry of order.items) {
       const menuItem = await MenuItem.findById(entry.menuItem);
 
-      // Deleted from menu or currently out of stock -> skip it.
-      if (!menuItem || !menuItem.availability) {
+      // Deleted from menu, sold out or hidden -> skip it.
+      if (!menuItem || !isOrderable(menuItem)) {
         skippedCount += 1;
         continue;
       }

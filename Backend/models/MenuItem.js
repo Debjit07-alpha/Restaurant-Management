@@ -36,6 +36,16 @@ const menuItemSchema = new mongoose.Schema(
       default: true
     },
 
+    // Three-state availability (admin controlled). The legacy boolean
+    // stays synced (available -> true, otherwise false) so every
+    // existing check keeps working. Documents without this field
+    // resolve as "available" (or "sold_out" when availability is false).
+    availabilityStatus: {
+      type: String,
+      enum: ["available", "sold_out", "hidden"],
+      default: "available"
+    },
+
     image: {
       type: String,
       default: ""
@@ -87,5 +97,13 @@ const menuItemSchema = new mongoose.Schema(
     timestamps: true
   }
 );
+
+// Keep the legacy boolean in sync with the three-state field.
+menuItemSchema.pre("save", function (next) {
+  if (this.isModified("availabilityStatus")) {
+    this.availability = this.availabilityStatus === "available";
+  }
+  next();
+});
 
 module.exports = mongoose.model("MenuItem", menuItemSchema);

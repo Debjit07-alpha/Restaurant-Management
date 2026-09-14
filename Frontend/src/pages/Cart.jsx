@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import api from "../api/axios";
 import { useCart } from "../context/CartContext";
 import { formatPrice } from "../utils/formatPrice";
 import { getDeliveryCharge } from "../utils/delivery";
+import { isSoldOut, resolveAvailabilityStatus } from "../utils/availability";
 import MenuImage from "../components/MenuImage";
 import CustomizationModal from "../components/CustomizationModal";
 import CustomizationLines from "../components/CustomizationLines";
@@ -16,11 +18,49 @@ function Cart() {
   // { key, item (modal-compatible), initial, isEdit }
   // Backend-validated coupon (amounts come from /coupons/validate).
   const [coupon, setCoupon] = useState(null);
+  // Fresh menu statuses: an item added earlier may have gone sold out
+  // or hidden since. Missing from the customer list = unavailable.
+  const [menuStatus, setMenuStatus] = useState({});
 
   const discount = coupon?.discountAmount || 0;
   const deliveryCharge =
     coupon?.deliveryCharge ?? getDeliveryCharge(totalPrice - discount);
   const grandTotal = totalPrice - discount + deliveryCharge;
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchStatus = async () => {
+      try {
+        const res = await api.get("/menu-items");
+        if (cancelled) return;
+        const map = {};
+        for (const item of res.data.menuItems || []) {
+          map[item._id] = resolveAvailabilityStatus(item);
+        }
+        setMenuStatus(map);
+      } catch {
+        if (!cancelled) setMenuStatus({});
+      }
+    };
+    if (cartItems.length > 0) fetchStatus();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cartItems.map((entry) => `${entry.id}:${entry.quantity}`).join("|")]);
+
+  // A cart line is fresh only if its product is still orderable. The
+  // stored per-line status covers lines; the menu map covers status
+  // changes (sold out / hidden / deleted) since the line was added.
+  const lineAvailability = (entry) => {
+    if (Object.prototype.hasOwnProperty.call(menuStatus, entry.id)) {
+      return menuStatus[entry.id];
+    }
+    return resolveAvailabilityStatus(entry);
+  };
+  const unavailableEntries = cartItems.filter(
+    (entry) => lineAvailability(entry) !== "available"
+  );
 
   const optionGroupsOf = (entry) =>
     entry.customization?.optionGroups || entry.optionGroups || [];
@@ -108,6 +148,39 @@ function Cart() {
         </p>
         <h1 className="font-display font-semibold text-4xl sm:text-5xl mt-2">Your Cart</h1>
 
+        {unavailableEntries.length > 0 && (
+          <div
+            role="alert"
+            className="mt-6 bg-amber-50 border border-amber-200 text-amber-800 text-sm p-4 rounded-[20px]"
+          >
+            <p className="font-semibold">
+              Some items in your cart are no longer available:
+            </p>
+            <ul className="mt-1.5 space-y-1">
+              {unavailableEntries.map((entry) => (
+                <li key={entry.key} className="flex items-center justify-between gap-3">
+                  <span>
+                    {entry.name} —{" "}
+                    {isSoldOut({ availabilityStatus: lineAvailability(entry) })
+                      ? "currently sold out"
+                      : "no longer available"}
+                  </span>
+                  <button
+                    onClick={() => removeItem(entry.key)}
+                    className="font-semibold underline underline-offset-2 hover:opacity-80 shrink-0"
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-[13px]">
+              Remove them to continue to checkout. Nothing was deleted
+              without telling you.
+            </p>
+          </div>
+        )}
+
         <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_360px] items-start">
           {/* Items */}
           <div className="space-y-4">
@@ -125,7 +198,16 @@ function Cart() {
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-[17px] font-bold truncate">{entry.name}</h3>
+                  <h3 className="text-[17px] font-bold truncate">
+                    {entry.name}
+                    {lineAvailability(entry) !== "available" && (
+                      <span className="ml-2 text-xs font-semibold text-red-700 bg-red-100 rounded-full px-2.5 py-0.5 align-middle">
+                        {isSoldOut({ availabilityStatus: lineAvailability(entry) })
+                          ? "Sold Out"
+                          : "Unavailable"}
+                      </span>
+                    )}
+                  </h3>
                   {entry.category && (
                     <p className="text-xs uppercase tracking-[0.18em] text-charcoal/50 mt-0.5">
                       {entry.category}
@@ -155,23 +237,24 @@ function Cart() {
                         +
                       </button>
                     </div>
-                    {entry.customization ? (
-                      <button
-                        onClick={() => openEdit(entry)}
-                        className="text-sm font-medium text-pine hover:underline underline-offset-2"
-                      >
-                        Edit
-                      </button>
-                    ) : (
-                      optionGroupsOf(entry).length > 0 && (
+                    {lineAvailability(entry) === "available" &&
+                      (entry.customization ? (
                         <button
-                          onClick={() => openCustomize(entry)}
+                          onClick={() => openEdit(entry)}
                           className="text-sm font-medium text-pine hover:underline underline-offset-2"
                         >
-                          Customize
+                          Edit
                         </button>
-                      )
-                    )}
+                      ) : (
+                        optionGroupsOf(entry).length > 0 && (
+                          <button
+                            onClick={() => openCustomize(entry)}
+                            className="text-sm font-medium text-pine hover:underline underline-offset-2"
+                          >
+                            Customize
+                          </button>
+                        )
+                      ))}
                     <button
                       onClick={() => removeItem(entry.key)}
                       className="text-sm text-charcoal/50 hover:text-burgundy transition-colors ml-1"
@@ -221,10 +304,16 @@ function Cart() {
             <CouponBox cartItems={cartItems} onCoupon={setCoupon} />
             <button
               onClick={() => navigate("/checkout")}
-              className="mt-6 w-full bg-burgundy text-white rounded-[28px] h-[52px] text-[15px] font-semibold hover:bg-burgundy-dark transition-all hover:-translate-y-0.5 shadow-[0_10px_25px_-10px_rgba(217,45,32,0.6)]"
+              disabled={unavailableEntries.length > 0}
+              className="mt-6 w-full bg-burgundy text-white rounded-[28px] h-[52px] text-[15px] font-semibold hover:bg-burgundy-dark transition-all hover:-translate-y-0.5 shadow-[0_10px_25px_-10px_rgba(217,45,32,0.6)] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
             >
               Proceed to Checkout
             </button>
+            {unavailableEntries.length > 0 && (
+              <p className="mt-2 text-[13px] text-charcoal/60 text-center">
+                Remove unavailable items to continue.
+              </p>
+            )}
             <Link
               to="/"
               className="block text-center mt-3 border border-charcoal/20 rounded-[28px] h-[52px] leading-[52px] text-[15px] font-semibold hover:border-burgundy hover:text-burgundy transition-colors"

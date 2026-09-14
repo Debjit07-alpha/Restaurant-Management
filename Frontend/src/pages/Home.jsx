@@ -9,6 +9,7 @@ import ServiceFeatures from "../components/home/ServiceFeatures";
 import Testimonials from "../components/home/Testimonials";
 import SiteFooter from "../components/home/SiteFooter";
 import { matchesCategory } from "../utils/categories";
+import { isHidden } from "../utils/availability";
 
 function DishSkeleton() {
   return (
@@ -39,7 +40,9 @@ function Home() {
         setLoading(true);
         setError("");
         const res = await api.get("/menu-items");
-        setMenuItems(res.data.menuItems || []);
+        // Hidden items never reach customer surfaces (backend filters
+        // too; this guards search/category/hero lists alike).
+        setMenuItems((res.data.menuItems || []).filter((m) => !isHidden(m)));
       } catch {
         setError("Unable to load today's menu.");
       } finally {
