@@ -48,8 +48,17 @@ const findZoneForPincode = async (pincode) => {
 
 // Quote delivery for a checkout. Pure calculation from DB truth — the
 // frontend only displays the result, the order API re-runs it.
-// Returns { deliverable, deliveryCharge, zoneName, estimatedDeliveryTime,
-// minimumOrderAmount, freeDeliveryThreshold, baseDeliveryFee, reason? }.
+// Precedence (highest first):
+// 1. Zone match decides fee/ETA/minimum: a zone custom value wins,
+//    otherwise the global value applies (never both at once).
+// 2. Free delivery threshold beats any fee (checked on the payable
+//    amount so coupons count). Minimum-order eligibility still applies.
+// 3. No zones configured yet -> legacy base-fee behavior, deliverable
+//    everywhere (backward compatible).
+// 4. Zones exist but none matches the pincode -> NOT deliverable.
+// Returns { deliverable, meetsMinimum, deliveryCharge, zoneName,
+// estimatedDeliveryTime, minimumOrderAmount, freeDeliveryThreshold,
+// baseDeliveryFee, reason? }.
 const quoteDelivery = async ({ pincode, subtotal, discountAmount = 0 }) => {
   const settings = await getSettings();
   const cleanSubtotal = roundMoney(subtotal);
@@ -57,6 +66,7 @@ const quoteDelivery = async ({ pincode, subtotal, discountAmount = 0 }) => {
 
   const quote = {
     deliverable: true,
+    meetsMinimum: true,
     deliveryCharge: 0,
     zoneName: null,
     estimatedDeliveryTime: settings.estimatedDeliveryTime,
@@ -71,25 +81,35 @@ const quoteDelivery = async ({ pincode, subtotal, discountAmount = 0 }) => {
     return quote;
   }
 
-  // Free delivery wins over everything (checked on payable amount so
-  // coupons count, matching the existing checkout pricing rule).
-  if (payable >= Number(settings.freeDeliveryThreshold)) {
-    quote.deliveryCharge = 0;
-    return quote;
-  }
-
   const zone = await findZoneForPincode(pincode);
   const anyZone = await DeliveryZone.exists({ isActive: true });
 
+  // Effective values: zone custom wins, else global (Rule 1 + Rule 2).
+  // Resolved BEFORE the free-delivery check so minimum eligibility is
+  // independent of free delivery.
   if (zone) {
     quote.zoneName = zone.name;
-    quote.deliveryCharge = roundMoney(zone.deliveryFee);
     if (zone.estimatedDeliveryTime) {
       quote.estimatedDeliveryTime = zone.estimatedDeliveryTime;
     }
     if (zone.minimumOrderAmount != null) {
       quote.minimumOrderAmount = zone.minimumOrderAmount;
     }
+  }
+
+  const minimum = Number(quote.minimumOrderAmount) || 0;
+  if (minimum > 0 && cleanSubtotal < minimum) {
+    quote.meetsMinimum = false;
+  }
+
+  // Free delivery threshold has highest pricing priority (Rule 3).
+  if (payable >= Number(settings.freeDeliveryThreshold)) {
+    quote.deliveryCharge = 0;
+    return quote;
+  }
+
+  if (zone) {
+    quote.deliveryCharge = roundMoney(zone.deliveryFee);
     return quote;
   }
 

@@ -85,6 +85,21 @@ function DeliveryCheck({ pincode, subtotal, discount, onQuote }) {
           </p>
         </div>
       )}
+      {!checking &&
+        !failed &&
+        quote &&
+        quote.deliverable &&
+        quote.meetsMinimum === false && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-sm text-amber-800">
+            <p className="font-semibold">Minimum order not met</p>
+            <p className="mt-0.5">
+              Minimum order amount{" "}
+              {quote.zoneName ? `for ${quote.zoneName} ` : ""}is{" "}
+              {formatPrice(quote.minimumOrderAmount)}. Add a little more to
+              continue.
+            </p>
+          </div>
+        )}
     </div>
   );
 }

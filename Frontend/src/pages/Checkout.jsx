@@ -172,7 +172,15 @@ function Checkout() {
     ? deliveryQuote.deliveryCharge
     : (coupon?.deliveryCharge ?? getDeliveryCharge(totalPrice - discount));
   const grandTotal = totalPrice - discount + deliveryCharge;
-  const deliveryBlocked = Boolean(deliveryQuote && !deliveryQuote.deliverable);
+  const minimumBlocked = Boolean(
+    deliveryQuote &&
+      deliveryQuote.deliverable &&
+      deliveryQuote.meetsMinimum === false
+  );
+  const deliveryBlocked = Boolean(
+    deliveryQuote &&
+      (!deliveryQuote.deliverable || deliveryQuote.meetsMinimum === false)
+  );
 
   // Success screen stays on this same page after the backend confirms.
   // It must render before the empty-cart guard because the cart is
@@ -902,8 +910,9 @@ function Checkout() {
             </button>
             {deliveryBlocked && (
               <p className="mt-2 text-[13px] text-red-700 text-center">
-                Delivery is currently unavailable to this location. Please
-                choose a supported address.
+                {minimumBlocked && deliveryQuote
+                  ? `Minimum order amount is ${formatPrice(deliveryQuote.minimumOrderAmount)}.`
+                  : "Delivery is currently unavailable to this location. Please choose a supported address."}
               </p>
             )}
           </aside>
