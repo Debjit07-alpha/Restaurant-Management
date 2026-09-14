@@ -11,6 +11,7 @@ import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
 import OrderSuccess from "./pages/OrderSuccess";
 import MyOrders from "./pages/MyOrders";
+import Notifications from "./pages/Notifications";
 import OrderDetails from "./pages/OrderDetails";
 import Favorites from "./pages/Favorites";
 import Register from "./pages/Register";
@@ -119,6 +120,17 @@ function App() {
               <>
                 <Navbar />
                 <Favorites />
+              </>
+            </UserRoute>
+          }
+        />
+        <Route
+          path="/notifications"
+          element={
+            <UserRoute>
+              <>
+                <Navbar />
+                <Notifications />
               </>
             </UserRoute>
           }

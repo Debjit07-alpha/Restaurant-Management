@@ -311,8 +311,30 @@ const updateOrderStatus = async (req, res) => {
       });
     }
 
+    // Notify only on an actual change: saving the same status again
+    // must not create a duplicate notification.
+    const statusChanged = order.orderStatus !== orderStatus;
     order.orderStatus = orderStatus;
     await order.save();
+
+    if (statusChanged) {
+      try {
+        const Notification = require("../models/Notification");
+        const {
+          buildOrderStatusNotification
+        } = require("../utils/orderNotifications");
+        await Notification.create(
+          buildOrderStatusNotification(order, orderStatus)
+        );
+      } catch (notifyError) {
+        // Status update wins: never fail the admin request because the
+        // notification insert failed.
+        console.error(
+          "Create status notification error:",
+          notifyError.message
+        );
+      }
+    }
 
     res.status(200).json({
       success: true,
