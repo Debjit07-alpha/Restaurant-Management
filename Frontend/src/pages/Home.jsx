@@ -83,7 +83,13 @@ function Home() {
   const toQuery = (pageNum) => {
     const params = { page: pageNum, limit: PAGE_LIMIT, sort: filters.sort };
     if (filters.search) params.search = filters.search;
-    if (filters.category !== "All") params.category = filters.category;
+    // Canonical category equality server-side; Healthy is the separate
+    // isHealthy flag, never a category value.
+    if (filters.category === "Healthy") {
+      params.healthy = "true";
+    } else if (filters.category !== "All") {
+      params.category = filters.category.toLowerCase();
+    }
     if (filters.type.length > 0) params.type = filters.type.join(",");
     if (filters.minPrice) params.minPrice = filters.minPrice;
     if (filters.maxPrice) params.maxPrice = filters.maxPrice;
@@ -331,7 +337,11 @@ function Home() {
               <p className="text-5xl" aria-hidden>🔍</p>
               <p className="font-display font-semibold text-3xl mt-4">No dishes found.</p>
               <p className="text-charcoal/60 mt-2">
-                Try changing your filters or search term.
+                {filters.category === "Healthy"
+                  ? "No healthy dishes are currently available."
+                  : filters.category !== "All"
+                    ? "No dishes found in this category."
+                    : "Try changing your filters or search term."}
               </p>
               <div className="mt-6 flex items-center justify-center gap-3">
                 <button

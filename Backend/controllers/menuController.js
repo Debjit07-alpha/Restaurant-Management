@@ -144,11 +144,13 @@ const getAllMenuItemsAdmin = async (req, res) => {
 
 // =============================
 // SEARCH MENU ITEMS (customer search + filters + sort + pagination)
-// GET /api/menu-items/search?search=&category=&type=&minPrice=&maxPrice=
-//   &rating=&availability=&sort=&page=&limit=
-// Hidden items are always excluded server-side. Unrated items are
-// excluded only when an explicit rating filter is set (never assumed
-// 5 stars). Sort relevance needs no AI: deterministic field scoring.
+// GET /api/menu-items/search?search=&category=&healthy=&type=&minPrice=
+//   &maxPrice=&rating=&availability=&sort=&page=&limit=
+// category is a canonical menuCategory (pizza/burgers/indian/chinese/
+// desserts/drinks) matched by EXACT equality; healthy=true filters
+// isHealthy === true. Hidden items are always excluded server-side.
+// Unrated items are excluded only under an explicit rating filter.
+// Sort relevance needs no AI: deterministic field scoring.
 // =============================
 const searchMenuItems = async (req, res) => {
   try {
@@ -180,11 +182,15 @@ const searchMenuItems = async (req, res) => {
       andClauses.push({ $or: tokenConditions(tokens) });
     }
 
-    // Keyword category tab (same map as the frontend tabs).
-    const { categoryConditions } = require("../utils/menuSearch");
-    const catConditions = categoryConditions(category);
-    if (catConditions) {
-      andClauses.push({ $or: catConditions });
+    // Canonical category: EXACT equality on menuCategory. Healthy is
+    // a separate boolean, never a category value.
+    const { parseMenuCategory, parseHealthy } = require("../utils/menuSearch");
+    const canonicalCategory = parseMenuCategory(category);
+    if (canonicalCategory) {
+      andClauses.push({ menuCategory: canonicalCategory });
+    }
+    if (parseHealthy(req.query.healthy)) {
+      andClauses.push({ isHealthy: true });
     }
 
     // Veg / non-veg (legacy items without foodType match neither).
@@ -336,6 +342,8 @@ const createMenuItem = async (req, res) => {
       availability,
       availabilityStatus,
       foodType,
+      menuCategory,
+      isHealthy,
       image
     } = req.body;
 
@@ -362,6 +370,24 @@ const createMenuItem = async (req, res) => {
         message: "Invalid food type"
       });
     }
+
+    // Canonical menu category + healthy flag (admin-set classification).
+    const { parseMenuCategory } = require("../utils/menuSearch");
+    const parsedMenuCategory =
+      menuCategory === undefined || menuCategory === null || menuCategory === ""
+        ? undefined
+        : parseMenuCategory(menuCategory);
+    if (menuCategory !== undefined && parsedMenuCategory === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid menu category"
+      });
+    }
+    const parsedHealthy =
+      isHealthy === undefined || isHealthy === null || isHealthy === ""
+        ? undefined
+        : isHealthy === true ||
+          String(isHealthy).trim().toLowerCase() === "true";
 
     // Three-state availability wins when supplied; otherwise the legacy
     // boolean maps to available/sold_out.
@@ -432,6 +458,10 @@ const createMenuItem = async (req, res) => {
       availability: status === "available",
       availabilityStatus: status,
       ...(parsedFoodType !== undefined ? { foodType: parsedFoodType } : {}),
+      ...(parsedMenuCategory !== undefined
+        ? { menuCategory: parsedMenuCategory }
+        : {}),
+      ...(parsedHealthy !== undefined ? { isHealthy: parsedHealthy } : {}),
       image: imageUrl || "",
       ...(customizationOptions !== undefined ? { customizationOptions } : {})
     });
@@ -473,12 +503,34 @@ const updateMenuItem = async (req, res) => {
       availability,
       availabilityStatus,
       foodType,
+      menuCategory,
+      isHealthy,
       image
     } = req.body;
 
     menuItem.name = name ?? menuItem.name;
     menuItem.description = description ?? menuItem.description;
     menuItem.category = category ?? menuItem.category;
+    if (menuCategory !== undefined) {
+      const { parseMenuCategory } = require("../utils/menuSearch");
+      if (menuCategory === null || menuCategory === "") {
+        menuItem.menuCategory = undefined;
+      } else {
+        const parsed = parseMenuCategory(menuCategory);
+        if (parsed === null) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid menu category"
+          });
+        }
+        menuItem.menuCategory = parsed;
+      }
+    }
+    if (isHealthy !== undefined) {
+      menuItem.isHealthy =
+        isHealthy === true ||
+        String(isHealthy).trim().toLowerCase() === "true";
+    }
     if (foodType !== undefined) {
       if (
         foodType === null ||

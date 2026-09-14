@@ -40,6 +40,25 @@ const menuItemSchema = new mongoose.Schema(
       default: undefined
     },
 
+    // Canonical customer-facing menu category. The course `category`
+    // (Starter/Main Course/...) is a different concept and stays
+    // separate. Category tabs filter by EXACT equality on this field —
+    // never by name/description keywords. Set from Admin Add/Edit
+    // forms; backfilled once for legacy items (see
+    // scripts/migrateMenuCategories.js).
+    menuCategory: {
+      type: String,
+      enum: ["pizza", "burgers", "indian", "chinese", "desserts", "drinks"],
+      default: undefined
+    },
+
+    // Explicit healthy flag. A food is healthy ONLY when this is true
+    // (never inferred from veg status, price, or description).
+    isHealthy: {
+      type: Boolean,
+      default: false
+    },
+
     availability: {
       type: Boolean,
       default: true
@@ -108,11 +127,10 @@ const menuItemSchema = new mongoose.Schema(
 );
 
 // Keep the legacy boolean in sync with the three-state field.
-menuItemSchema.pre("save", function (next) {
+menuItemSchema.pre("save", function () {
   if (this.isModified("availabilityStatus")) {
     this.availability = this.availabilityStatus === "available";
   }
-  next();
 });
 
 module.exports = mongoose.model("MenuItem", menuItemSchema);

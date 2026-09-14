@@ -1,35 +1,25 @@
-// Server-side mirror of the customer category tabs (see
-// Frontend src/utils/categories.js). Tabs match by keywords against
-// name/description/category because the stored enum is only
-// Starter/Main Course/Dessert/Beverage. Kept in sync deliberately:
-// search filtering must live in MongoDB so counts/pagination are right.
-const CATEGORY_KEYWORDS = {
-  Pizza: ["pizza"],
-  Burgers: ["burger"],
-  Indian: [
-    "indian", "tikka", "masala", "curry", "biryani", "paneer", "dal",
-    "makhni", "chole", "kebab", "tandoori", "butter chicken", "dosa",
-    "samosa", "thali"
-  ],
-  Chinese: [
-    "chinese", "noodle", "hakka", "manchurian", "schezwan", "szechwan",
-    "fried rice", "chilli chicken", "spring roll"
-  ],
-  Desserts: [
-    "dessert", "cake", "lava", "brownie", "ice cream", "gulab",
-    "kheer", "pastry", "sweet", "pudding", "mousse"
-  ],
-  Drinks: [
-    "drink", "beverage", "juice", "shake", "lassi", "coffee", "tea",
-    "cola", "soda", "mocktail", "smoothie", "cold drink"
-  ],
-  Healthy: [
-    "healthy", "salad", "grill", "oats", "soup", "sprouts", "quinoa",
-    "diet", "low fat"
-  ]
-};
+// Canonical customer menu categories. Category tabs filter by EXACT
+// equality on the item's menuCategory field — never by name/description
+// keywords (that looseness showed pizzas under Indian and burgers under
+// Healthy). "Healthy" is NOT a category: it is the separate isHealthy
+// boolean, filtered via the `healthy` parameter below.
+const MENU_CATEGORIES = [
+  "pizza",
+  "burgers",
+  "indian",
+  "chinese",
+  "desserts",
+  "drinks"
+];
 
-const CATEGORY_TABS = ["All", ...Object.keys(CATEGORY_KEYWORDS)];
+// Normalize a category parameter to a canonical value (or null when
+// absent/All/unknown — unknown never filters everything out).
+const parseMenuCategory = (value) => {
+  if (value === undefined || value === null) return null;
+  const normalized = String(value).trim().toLowerCase();
+  if (normalized === "" || normalized === "all") return null;
+  return MENU_CATEGORIES.includes(normalized) ? normalized : null;
+};
 
 // Escape user text for literal $regexMatch (no regex injection).
 const escapeRegExp = (text) => String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -44,16 +34,13 @@ const tokenMatchConditions = (tokens) => {
   return conditions;
 };
 
-// Category tab -> $or keyword conditions (null when All/unknown).
-const categoryConditions = (category) => {
-  const keywords = CATEGORY_KEYWORDS[category];
-  if (!category || category === "All" || !keywords) return null;
-  const conditions = [];
-  for (const keyword of keywords) {
-    const rx = { $regex: escapeRegExp(keyword), $options: "i" };
-    conditions.push({ name: rx }, { category: rx }, { description: rx });
+// Parse the healthy flag ("true"/true only).
+const parseHealthy = (value) => {
+  if (value === true) return true;
+  if (typeof value === "string" && value.trim().toLowerCase() === "true") {
+    return true;
   }
-  return conditions;
+  return false;
 };
 
 // Deterministic relevance score (higher = better):
@@ -120,10 +107,10 @@ const relevanceScoreExpression = (query, tokens) => {
 };
 
 module.exports = {
-  CATEGORY_KEYWORDS,
-  CATEGORY_TABS,
+  MENU_CATEGORIES,
+  parseMenuCategory,
+  parseHealthy,
   escapeRegExp,
   tokenMatchConditions,
-  categoryConditions,
   relevanceScoreExpression
 };

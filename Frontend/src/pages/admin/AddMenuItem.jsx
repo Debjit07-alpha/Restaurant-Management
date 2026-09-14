@@ -16,6 +16,8 @@ function AddMenuItem() {
     price: "",
     availability: "inStock",
     foodType: "",
+    menuCategory: "",
+    isHealthy: "no",
     image: "",
   });
   const [imageFile, setImageFile] = useState(null);
@@ -76,6 +78,10 @@ function AddMenuItem() {
       if (form.foodType) {
         data.append("foodType", form.foodType);
       }
+      if (form.menuCategory) {
+        data.append("menuCategory", form.menuCategory);
+      }
+      data.append("isHealthy", form.isHealthy === "yes" ? "true" : "false");
       if (imageFile) {
         // A newly uploaded file takes priority over the image URL.
         data.append("image", imageFile);
@@ -181,6 +187,38 @@ function AddMenuItem() {
             <option value="">Unspecified</option>
             <option value="veg">Vegetarian</option>
             <option value="non_veg">Non-Vegetarian</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium">
+            Menu Category{" "}
+            <span className="font-normal text-gray-500">(customer tabs)</span>
+          </label>
+          <select
+            name="menuCategory"
+            value={form.menuCategory}
+            onChange={handleChange}
+            className="mt-1 w-full border rounded px-3 py-2"
+          >
+            <option value="">Unspecified</option>
+            <option value="pizza">Pizza</option>
+            <option value="burgers">Burgers</option>
+            <option value="indian">Indian</option>
+            <option value="chinese">Chinese</option>
+            <option value="desserts">Desserts</option>
+            <option value="drinks">Drinks</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium">Healthy</label>
+          <select
+            name="isHealthy"
+            value={form.isHealthy}
+            onChange={handleChange}
+            className="mt-1 w-full border rounded px-3 py-2"
+          >
+            <option value="no">No</option>
+            <option value="yes">Yes</option>
           </select>
         </div>
 
