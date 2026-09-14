@@ -124,10 +124,16 @@ function Navbar() {
           <Link
             to="/"
             onClick={closeMenu}
-            className="relative pb-1 text-burgundy font-semibold"
+            className={`relative pb-1 transition-colors ${
+              location.pathname === "/"
+                ? "text-burgundy font-semibold"
+                : "text-charcoal/80 hover:text-burgundy"
+            }`}
           >
             Home
-            <span className="absolute left-0 right-0 -bottom-0.5 h-[2.5px] rounded-full bg-burgundy" />
+            {location.pathname === "/" && (
+              <span className="absolute left-0 right-0 -bottom-0.5 h-[2.5px] rounded-full bg-burgundy" />
+            )}
           </Link>
           {navLink("Menu", false, goToSection("menu"))}
           {navLink("About", false, goToSection("about"))}
@@ -244,7 +250,13 @@ function Navbar() {
       {open && (
         <div className="md:hidden border-t border-charcoal/10 bg-cream px-4 py-4 flex flex-col gap-4 text-[15px]">
           {searchBox("flex items-center gap-2 bg-white border border-charcoal/10 rounded-full px-4 py-2.5")}
-          <Link to="/" onClick={closeMenu} className="text-burgundy font-semibold">
+          <Link
+            to="/"
+            onClick={closeMenu}
+            className={
+              location.pathname === "/" ? "text-burgundy font-semibold" : ""
+            }
+          >
             Home
           </Link>
           <a href="#menu" onClick={goToSection("menu")}>
