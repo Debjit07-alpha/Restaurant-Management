@@ -10,6 +10,7 @@ import MenuImage from "../components/MenuImage";
 import CustomizationLines from "../components/CustomizationLines";
 import CouponBox, { storeCouponCode } from "../components/CouponBox";
 import DeliveryCheck from "../components/DeliveryCheck";
+import RewardsRedeem from "../components/RewardsRedeem";
 
 const inputClass =
   "mt-1 w-full border border-charcoal/20 rounded-xl px-3 py-2 bg-cream focus:outline-none focus:border-burgundy";
@@ -150,6 +151,8 @@ function Checkout() {
   }, []);
   // Backend-validated coupon (amounts come from /coupons/validate).
   const [coupon, setCoupon] = useState(null);
+  // Backend-validated loyalty redemption ({ points, discount } | null).
+  const [rewards, setRewards] = useState(null);
   // Live delivery quote for the checkout pincode (/delivery/check).
   // The backend re-quotes at order time; this only drives display +
   // the unavailable-address gate.
@@ -165,13 +168,17 @@ function Checkout() {
   }, [user]);
 
   const discount = coupon?.discountAmount || 0;
+  const rewardsDiscount = rewards?.discount || 0;
   // Live zone quote wins when present; otherwise the coupon validation
   // response (zone-aware when a pincode was sent); otherwise the legacy
   // display rule. The backend always recalculates at order time.
   const deliveryCharge = deliveryQuote
     ? deliveryQuote.deliveryCharge
     : (coupon?.deliveryCharge ?? getDeliveryCharge(totalPrice - discount));
-  const grandTotal = totalPrice - discount + deliveryCharge;
+  const grandTotal = Math.max(
+    0,
+    totalPrice - discount - rewardsDiscount + deliveryCharge
+  );
   const minimumBlocked = Boolean(
     deliveryQuote &&
       deliveryQuote.deliverable &&
@@ -210,6 +217,9 @@ function Checkout() {
               {formatPrice(placedOrder.discountAmount || 0)}
             </p>
           )}
+          <p className="mt-3 text-[15px] text-charcoal/60">
+            ⭐ Reward points will be credited after your order is delivered.
+          </p>
           <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
             <Link
               to="/"
@@ -473,6 +483,7 @@ function Checkout() {
         },
         paymentMethod,
         ...(coupon?.couponCode ? { couponCode: coupon.couponCode } : {}),
+        ...(rewards?.points > 0 ? { rewardPoints: rewards.points } : {}),
         items: cartItems.map((entry) => ({
           menuItem: entry.id,
           quantity: entry.quantity,
@@ -492,6 +503,7 @@ function Checkout() {
       setStatus("success");
       setCoupon(null);
       storeCouponCode("");
+      setRewards(null);
       clearCart();
     } catch (err) {
       // Failure: stay on checkout, keep the cart, re-enable the button.
@@ -873,6 +885,7 @@ function Checkout() {
               onCoupon={setCoupon}
               pincode={form.pincode}
             />
+            <RewardsRedeem onRewards={setRewards} />
             <DeliveryCheck
               pincode={form.pincode}
               subtotal={totalPrice}
@@ -888,6 +901,14 @@ function Checkout() {
                 <p className="flex justify-between text-pine">
                   <span>Discount{coupon?.couponCode ? ` (${coupon.couponCode})` : ""}</span>
                   <span className="font-medium">-{formatPrice(discount)}</span>
+                </p>
+              )}
+              {rewardsDiscount > 0 && (
+                <p className="flex justify-between text-pine">
+                  <span>
+                    Rewards{rewards?.points ? ` (${rewards.points} points)` : ""}
+                  </span>
+                  <span className="font-medium">-{formatPrice(rewardsDiscount)}</span>
                 </p>
               )}
               <p className="flex justify-between">

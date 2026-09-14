@@ -35,6 +35,25 @@ const userSchema = new mongoose.Schema(
         }
       ],
       default: []
+    },
+
+    // Loyalty points (spendable balance + lifetime counters).
+    rewardPoints: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+
+    lifetimeRewardPoints: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+
+    redeemedRewardPoints: {
+      type: Number,
+      default: 0,
+      min: 0
     }
   },
   {

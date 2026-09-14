@@ -138,6 +138,36 @@ const orderSchema = new mongoose.Schema(
       min: 0
     },
 
+    // Loyalty redemption snapshot (backend-computed, never trusted).
+    rewardPointsUsed: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+
+    rewardDiscount: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+
+    // Earn-on-delivered bookkeeping (idempotency + audit).
+    rewardsCredited: {
+      type: Boolean,
+      default: false
+    },
+
+    rewardPointsEarned: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+
+    rewardRedeemReversed: {
+      type: Boolean,
+      default: false
+    },
+
     totalAmount: {
       type: Number,
       required: true,

@@ -203,6 +203,9 @@ function Navbar() {
                   <Link to="/favorites" className="hover:text-burgundy transition-colors font-medium whitespace-nowrap">
                     My Favorites
                   </Link>
+                  <Link to="/rewards" className="hover:text-burgundy transition-colors font-medium whitespace-nowrap">
+                    Rewards
+                  </Link>
                 </>
               )}
               <button onClick={handleLogout} className="hover:text-burgundy transition-colors font-medium">
@@ -285,6 +288,9 @@ function Navbar() {
                   </Link>
                   <Link to="/favorites" onClick={closeMenu}>
                     My Favorites
+                  </Link>
+                  <Link to="/rewards" onClick={closeMenu}>
+                    Rewards
                   </Link>
                   <Link to="/notifications" onClick={closeMenu}>
                     Notifications

@@ -10,6 +10,14 @@ const {
 } = require("../utils/orderPricing");
 const { validateAndPriceCoupon } = require("../utils/couponService");
 const { quoteDelivery, assertMinimumOrder } = require("../utils/deliveryService");
+const RewardTransaction = require("../models/RewardTransaction");
+const {
+  getRewardSettings,
+  quoteRedemption,
+  deductPoints,
+  refundPoints,
+  discountForPoints
+} = require("../utils/rewardService");
 
 const PAYMENT_METHODS = ["Cash on Delivery", "UPI on Delivery"];
 const ORDER_STATUSES = [
@@ -35,6 +43,9 @@ const generateOrderId = () => {
 // CREATE ORDER (logged-in user)
 // =============================
 const createOrder = async (req, res) => {
+  // Declared outside try: the catch block refunds deducted points.
+  let rewardPointsUsed = 0;
+  let rewardsDeducted = false;
   try {
     const { customerName, mobile, address, paymentMethod, items } = req.body;
 
@@ -206,6 +217,57 @@ const createOrder = async (req, res) => {
     }
     const deliveryCharge = quote.deliveryCharge;
 
+    // Optional loyalty redemption, validated against the live balance.
+    // Deducted atomically BEFORE the order is stored; refunded with an
+    // auditable reversal if order creation fails below.
+    let rewardDiscount = 0;
+    const requestedRewardPoints = Math.floor(Number(req.body.rewardPoints) || 0);
+    if (requestedRewardPoints > 0) {
+      let redemption;
+      try {
+        redemption = await quoteRedemption({
+          userId: req.user.userId,
+          requestedPoints: requestedRewardPoints
+        });
+      } catch (redemptionError) {
+        return res.status(redemptionError.status || 400).json({
+          success: false,
+          message: redemptionError.message || "Invalid reward redemption"
+        });
+      }
+      // Cap so the discount never exceeds the payable amount (total
+      // floor is ₹0). Shrink points to match the capped discount.
+      const payableBeforeRewards = Math.max(
+        0,
+        subtotal - discountAmount + deliveryCharge
+      );
+      const settings = redemption.settings;
+      let points = redemption.points;
+      const unit = Number(settings.rupeesPerPoint) || 0;
+      if (unit > 0) {
+        points = Math.min(points, Math.floor(payableBeforeRewards / unit));
+      }
+      if (points <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Reward discount exceeds the order total"
+        });
+      }
+      const deducted = await deductPoints(req.user.userId, points);
+      if (!deducted) {
+        return res.status(400).json({
+          success: false,
+          message: "You don't have enough reward points."
+        });
+      }
+      rewardsDeducted = true;
+      rewardPointsUsed = points;
+      rewardDiscount = Math.min(
+        discountForPoints(settings, points),
+        payableBeforeRewards
+      );
+    }
+
     // Generate a unique readable order id
     let orderId = generateOrderId();
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -234,8 +296,13 @@ const createOrder = async (req, res) => {
       subtotal,
       couponCode,
       discountAmount,
+      rewardPointsUsed,
+      rewardDiscount,
       deliveryCharge,
-      totalAmount: subtotal - discountAmount + deliveryCharge,
+      totalAmount: Math.max(
+        0,
+        subtotal - discountAmount - rewardDiscount + deliveryCharge
+      ),
       paymentMethod: method,
       orderStatus: "Pending"
     });
@@ -252,12 +319,42 @@ const createOrder = async (req, res) => {
       });
     }
 
+    // Auditable redemption record, linked to the stored order.
+    if (rewardsDeducted && rewardPointsUsed > 0) {
+      await RewardTransaction.create({
+        user: req.user.userId,
+        order: order._id,
+        type: "redeem",
+        points: -rewardPointsUsed,
+        description: `Redeemed on order #${order.orderId}`
+      });
+    }
+
     res.status(201).json({
       success: true,
       message: "Order placed successfully",
       order
     });
   } catch (error) {
+    // Points were deducted but the order never stored: refund with an
+    // auditable reversal so the customer never loses points silently.
+    if (rewardsDeducted && rewardPointsUsed > 0) {
+      try {
+        await refundPoints(req.user.userId, rewardPointsUsed);
+        await RewardTransaction.create({
+          user: req.user.userId,
+          order: null,
+          type: "reversal",
+          points: rewardPointsUsed,
+          description: "Refund for failed order placement"
+        });
+      } catch (refundError) {
+        console.error(
+          "Reward refund error:",
+          refundError.message
+        );
+      }
+    }
     console.error("Create order error:", error.message);
 
     res.status(500).json({
@@ -366,6 +463,77 @@ const updateOrderStatus = async (req, res) => {
           "Create status notification error:",
           notifyError.message
         );
+      }
+
+      // Loyalty earn: only on the transition INTO Delivered, exactly
+      // once per order (atomic claim on rewardsCredited).
+      if (orderStatus === "Delivered") {
+        try {
+          const claimed = await Order.findOneAndUpdate(
+            { _id: order._id, rewardsCredited: { $ne: true } },
+            { $set: { rewardsCredited: true } },
+            { new: true }
+          );
+          if (claimed) {
+            const settings = await getRewardSettings();
+            const {
+              pointsForSpend,
+              creditPoints
+            } = require("../utils/rewardService");
+            const eligible = Math.max(
+              0,
+              Number(order.subtotal) -
+                Number(order.discountAmount) -
+                Number(order.rewardDiscount)
+            );
+            const earned = pointsForSpend(settings, eligible);
+            if (earned > 0) {
+              await creditPoints(order.user, earned);
+              await RewardTransaction.create({
+                user: order.user,
+                order: order._id,
+                type: "earn",
+                points: earned,
+                description: `Order #${order.orderId} completed`
+              });
+              await Order.findByIdAndUpdate(order._id, {
+                rewardPointsEarned: earned
+              });
+            }
+          }
+        } catch (rewardError) {
+          console.error("Credit rewards error:", rewardError.message);
+        }
+      }
+
+      // Cancellation: restore redeemed points once, with an auditable
+      // reversal transaction (history is never deleted).
+      if (
+        orderStatus === "Cancelled" &&
+        Number(order.rewardPointsUsed) > 0 &&
+        !order.rewardRedeemReversed
+      ) {
+        try {
+          const claimed = await Order.findOneAndUpdate(
+            { _id: order._id, rewardRedeemReversed: { $ne: true } },
+            { $set: { rewardRedeemReversed: true } }
+          );
+          if (claimed) {
+            await refundPoints(
+              order.user,
+              Number(order.rewardPointsUsed)
+            );
+            await RewardTransaction.create({
+              user: order.user,
+              order: order._id,
+              type: "reversal",
+              points: Number(order.rewardPointsUsed),
+              description: `Refund for cancelled order #${order.orderId}`
+            });
+          }
+        } catch (refundError) {
+          console.error("Reward refund error:", refundError.message);
+        }
       }
     }
 

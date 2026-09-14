@@ -58,6 +58,7 @@ function Users() {
                 <th className="text-left p-3">Name</th>
                 <th className="text-left p-3">Email</th>
                 <th className="text-left p-3">Role</th>
+                <th className="text-left p-3">Reward Points</th>
                 <th className="text-left p-3">Registration Date</th>
                 <th className="text-left p-3">Actions</th>
               </tr>
@@ -68,6 +69,13 @@ function Users() {
                   <td className="p-3 font-medium">{u.name}</td>
                   <td className="p-3">{u.email}</td>
                   <td className="p-3">{u.role}</td>
+                  <td className="p-3 whitespace-nowrap">
+                    ⭐ {Number(u.rewardPoints) || 0}
+                    <span className="block text-xs text-gray-500">
+                      +{Number(u.lifetimeRewardPoints) || 0} / -
+                      {Number(u.redeemedRewardPoints) || 0}
+                    </span>
+                  </td>
                   <td className="p-3">
                     {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—"}
                   </td>

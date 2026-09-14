@@ -12,6 +12,7 @@ import Checkout from "./pages/Checkout";
 import OrderSuccess from "./pages/OrderSuccess";
 import MyOrders from "./pages/MyOrders";
 import Notifications from "./pages/Notifications";
+import Rewards from "./pages/Rewards";
 import OrderDetails from "./pages/OrderDetails";
 import Favorites from "./pages/Favorites";
 import Register from "./pages/Register";
@@ -27,6 +28,7 @@ import Orders from "./pages/admin/Orders";
 import Reviews from "./pages/admin/Reviews";
 import Coupons from "./pages/admin/Coupons";
 import Delivery from "./pages/admin/Delivery";
+import RewardsAdmin from "./pages/admin/Rewards";
 
 function App() {
   return (
@@ -121,6 +123,17 @@ function App() {
               <>
                 <Navbar />
                 <Favorites />
+              </>
+            </UserRoute>
+          }
+        />
+        <Route
+          path="/rewards"
+          element={
+            <UserRoute>
+              <>
+                <Navbar />
+                <Rewards />
               </>
             </UserRoute>
           }
@@ -232,6 +245,16 @@ function App() {
             <ProtectedRoute>
               <AdminLayout>
                 <Coupons />
+              </AdminLayout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/rewards"
+          element={
+            <ProtectedRoute>
+              <AdminLayout>
+                <RewardsAdmin />
               </AdminLayout>
             </ProtectedRoute>
           }

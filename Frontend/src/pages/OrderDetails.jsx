@@ -410,6 +410,22 @@ function OrderDetails() {
                 </span>
               </p>
             )}
+            {Number(order.rewardPointsUsed) > 0 && (
+              <p className="flex justify-between text-pine">
+                <span>
+                  Reward Points Used: {order.rewardPointsUsed}
+                </span>
+                <span className="font-medium">
+                  -{formatPrice(order.rewardDiscount)}
+                </span>
+              </p>
+            )}
+            {Number(order.rewardPointsEarned) > 0 && (
+              <p className="flex justify-between text-pine">
+                <span>Reward Points Earned</span>
+                <span className="font-medium">+{order.rewardPointsEarned}</span>
+              </p>
+            )}
             <p className="flex justify-between">
               <span className="text-charcoal/60">Delivery</span>
               <span className="font-medium">
