@@ -281,9 +281,13 @@ function Navbar() {
       </div>
 
       {/* ── LEVEL 2 — main navbar ─────────────────────────────────── */}
+      {/* NOTE: never add overflow-hidden here — the user + notification
+          dropdowns are absolutely positioned descendants and must be
+          allowed to escape this container. Decorative layers below are
+          inset-0 so they need no clipping. */}
       <nav
         aria-label="Primary"
-        className="relative overflow-hidden border-b border-white/[0.07]"
+        className="relative overflow-visible border-b border-white/[0.07]"
         style={{
           backgroundColor: "#14120f",
           backgroundImage:
@@ -398,7 +402,7 @@ function Navbar() {
                 {userMenuOpen && (
                   <div
                     role="menu"
-                    className="absolute right-0 mt-2.5 w-60 rounded-2xl border border-white/10 bg-[#1d1b17]/95 backdrop-blur-md shadow-[0_25px_50px_-20px_rgba(0,0,0,0.8)] p-2 z-[60]"
+                    className="absolute right-0 mt-2.5 w-60 rounded-2xl border border-white/10 bg-[#1d1b17]/95 backdrop-blur-md shadow-[0_25px_50px_-20px_rgba(0,0,0,0.8)] p-2 z-[70]"
                   >
                     <p className="px-4 pt-2.5 pb-2 text-[12px] uppercase tracking-[0.14em] text-cream/40">
                       Hi, {firstName}
