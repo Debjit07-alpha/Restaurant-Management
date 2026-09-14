@@ -227,7 +227,7 @@ function OrderDetails() {
 
   return (
     <div className="bg-cream text-charcoal min-h-screen">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-10 sm:py-14 animate-fade-in">
+      <div key={id} className="max-w-3xl mx-auto px-4 sm:px-6 py-10 sm:py-14 animate-fade-in">
         <Link to="/orders" className="text-burgundy hover:underline text-sm font-medium">
           &larr; Back to My Orders
         </Link>

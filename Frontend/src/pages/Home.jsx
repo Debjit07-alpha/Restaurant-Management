@@ -282,24 +282,27 @@ function Home() {
         )}
       </section>
 
-      {/* 5. RESULTS */}
+      {/* 5. RESULTS (key replays the existing page fade on every
+          category/filter/sort/search change — no reload, same visual
+          language as route navigation) */}
       {showGrid && (
-        <PopularDishes
-          items={items}
-          expanded={expanded || isFiltering}
-          onToggleExpanded={() => setExpanded((v) => !v)}
-        />
-      )}
-
-      {showGrid && page < pages && (
-        <div className="max-w-[1520px] mx-auto px-6 lg:px-12 pb-4 text-center">
-          <button
-            onClick={loadMore}
-            disabled={loadingMore}
-            className="border border-charcoal/20 rounded-full px-10 py-3 text-sm font-semibold hover:border-burgundy hover:text-burgundy transition-colors disabled:opacity-50 bg-white"
-          >
-            {loadingMore ? "Loading..." : "Load More"}
-          </button>
+        <div key={searchParams.toString()} className="animate-fade-in">
+          <PopularDishes
+            items={items}
+            expanded={expanded || isFiltering}
+            onToggleExpanded={() => setExpanded((v) => !v)}
+          />
+          {page < pages && (
+            <div className="max-w-[1520px] mx-auto px-6 lg:px-12 pb-4 text-center">
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="border border-charcoal/20 rounded-full px-10 py-3 text-sm font-semibold hover:border-burgundy hover:text-burgundy transition-colors disabled:opacity-50 bg-white"
+              >
+                {loadingMore ? "Loading..." : "Load More"}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

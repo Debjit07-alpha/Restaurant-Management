@@ -41,7 +41,7 @@ function OrderSuccess() {
 
   return (
     <div className="bg-cream text-charcoal">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12 sm:py-16 animate-fade-in">
         {error || !order ? (
           <div className="text-center">
             <p className="text-burgundy">{error || "Order not found."}</p>

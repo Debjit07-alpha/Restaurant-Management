@@ -96,7 +96,7 @@ function MenuItemDetails() {
           &larr; Back to menu
         </Link>
 
-        <div className="mt-6 grid gap-10 lg:grid-cols-2 lg:gap-16 items-start animate-fade-in">
+        <div key={id} className="mt-6 grid gap-10 lg:grid-cols-2 lg:gap-16 items-start animate-fade-in">
           {/* Image */}
           <div className="relative overflow-hidden rounded-[24px] bg-cream-dark shadow-[0_25px_50px_-20px_rgba(23,23,23,0.35)]">
             <MenuImage
